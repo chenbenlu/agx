@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 如果任何命令出錯，不立即退出，但保留錯誤提示
+# 如果任何命令出錯，立即退出
 set -eo pipefail
 
 ROS_DISTRO=noetic
@@ -32,7 +32,6 @@ if [ -d "${HDL_WS}/src" ]; then
         echo ">>> hdl_ws already built. Skipping build."
     fi
 
-    # 允許即使 devel/setup.bash 不存在也不中斷
     if [ -f "${HDL_WS}/devel/setup.bash" ]; then
         source ${HDL_WS}/devel/setup.bash
     fi
@@ -63,14 +62,38 @@ else
 fi
 
 # -------------------------------------------------
-# Execute passed command or fallback to bash
+# Append sourcing to .bashrc for future shells
+# -------------------------------------------------
+BASHRC_FILE="${WORKSPACE}/.bashrc"
+
+# ROS
+if ! grep -Fxq "source /opt/ros/${ROS_DISTRO}/setup.bash" $BASHRC_FILE; then
+    echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> $BASHRC_FILE
+fi
+
+# HDL workspace
+if [ -f "${HDL_WS}/devel/setup.bash" ]; then
+    if ! grep -Fxq "source ${HDL_WS}/devel/setup.bash" $BASHRC_FILE; then
+        echo "source ${HDL_WS}/devel/setup.bash" >> $BASHRC_FILE
+    fi
+fi
+
+# LiDAR workspace
+if [ -f "${LIDAR_WS}/devel_isolated/setup.bash" ]; then
+    if ! grep -Fxq "source ${LIDAR_WS}/devel_isolated/setup.bash" $BASHRC_FILE; then
+        echo "source ${LIDAR_WS}/devel_isolated/setup.bash" >> $BASHRC_FILE
+    fi
+fi
+
+# -------------------------------------------------
+# Execute passed command or fallback to persistent bash
 # -------------------------------------------------
 echo "=== Environment ready ==="
 
-# Drop to shell or execute passed command
 if [ $# -gt 0 ]; then
+    # 執行傳入的 command，例如 docker-compose run navigation bash
     exec "$@"
 else
-    # 沒有傳入命令時保持容器活著
-    exec bash -c "while true; do sleep 1000; done"
+    # 沒有傳入 command → 保持容器活著並使用交互 shell
+    exec bash
 fi

@@ -24,4 +24,7 @@ services:
       - ./navigation/src/hdl_ws:/root/hdl_ws/src
       - ./navigation/src/lidar_ws:/root/lidar_ws/src
     entrypoint: ["/root/entrypoint.sh"]
-    command: ["bash"]  
+    # command: ["bash"]  # 可選，覆蓋 entrypoint.sh 的行為
+    tty: true
+    stdin_open: true
+    restart: unless-stopped

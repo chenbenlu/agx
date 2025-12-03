@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-image-transport \
     ros-${ROS_DISTRO}-ddynamic-reconfigure \
     ros-${ROS_DISTRO}-rgbd-launch \
+    ros-${ROS_DISTRO}-rosserial-python \
     libssl-dev \
     libusb-1.0-0-dev \
     libudev-dev \

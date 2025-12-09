@@ -11,7 +11,7 @@ echo "   ROS ${ROS_DISTRO} Development Container"
 echo "========================================="
 
 # -------------------------------------------------
-# Source ROS
+# 1. Source System ROS
 # -------------------------------------------------
 if [ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]; then
     source /opt/ros/${ROS_DISTRO}/setup.bash
@@ -25,7 +25,7 @@ if ! grep -Fxq "source /opt/ros/${ROS_DISTRO}/setup.bash" $BASHRC_FILE; then
 fi
 
 # -------------------------------------------------
-# Build HDL Workspace (optional)
+# 2. Build HDL Workspace (Core SLAM)
 # -------------------------------------------------
 HDL_WS=${WORKSPACE}/hdl_ws
 
@@ -47,7 +47,7 @@ else
 fi
 
 # -------------------------------------------------
-# Build LiDAR Workspace (isolated, optional)
+# 3. Build LiDAR Workspace
 # -------------------------------------------------
 LIDAR_WS=${WORKSPACE}/lidar_ws
 
@@ -71,6 +71,12 @@ fi
 # -------------------------------------------------
 # Append sourcing to .bashrc for future shells
 # -------------------------------------------------
+BASHRC_FILE="${WORKSPACE}/.bashrc"
+
+# ROS
+if ! grep -Fxq "source /opt/ros/${ROS_DISTRO}/setup.bash" $BASHRC_FILE; then
+    echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> $BASHRC_FILE
+fi
 
 # HDL workspace
 if [ -f "${HDL_WS}/devel/setup.bash" ]; then
@@ -92,9 +98,7 @@ fi
 echo "=== Environment ready ==="
 
 if [ $# -gt 0 ]; then
-    # 執行傳入的 command，例如 docker-compose run navigation bash
     exec "$@"
 else
-    # 沒有傳入 command → 保持容器活著並使用交互 shell
     exec bash
 fi

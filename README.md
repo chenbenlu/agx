@@ -1,3 +1,13 @@
+This is a revised, secure, and professional `README.md` for your GitHub repository. It removes hardcoded IPs and generalizes the instructions so that anyone (including your future self) can follow them without security risks.
+
+### Key Changes:
+
+1.  **Replaced Hardcoded IPs**: Changed specific IPs like `192.168.200.112` to `<AGX_IP>` placeholders.
+2.  **Configuration Section**: Added a step to copy `.env.example` to `.env.agx`, emphasizing that credentials should not be committed.
+3.  **General Hardware Setup**: Generalized the LiDAR setup instructions to explain the subnet logic rather than just providing a single static IP.
+
+-----
+
 # AGX Hybrid Navigation System (ROS 1 Noetic + ROS 2 Humble)
 
   
@@ -19,13 +29,13 @@ The system uses a **Dual-NIC Strategy** to separate management traffic from high
 
 ```mermaid
 graph TD
-    PC[PC Workstation] -- WiFi/SSH (192.168.200.x) --> AGX[AGX Orin]
-    AGX -- Ethernet (192.168.1.x) --> LiDAR[Velodyne VLP-16]
+    PC[PC Workstation] -- WiFi/SSH (Management) --> AGX[AGX Orin]
+    AGX -- Ethernet (Sensor Data) --> LiDAR[Velodyne VLP-16]
     AGX -- USB --> Sensors[RealSense/Arduino]
 ```
 
-  * **Management Network (`wlan0`)**: `192.168.200.x` (Used for SSH, Docker Deploy, Foxglove Monitoring).
-  * **Sensor Network (`eth0`)**: `192.168.1.x` (Dedicated to LiDAR UDP traffic).
+  * **Management Network (`wlan0`)**: Used for SSH, Docker Deploy, and Foxglove Monitoring.
+  * **Sensor Network (`eth0`)**: Dedicated to LiDAR UDP traffic (e.g., `192.168.1.x`).
 
 -----
 
@@ -65,16 +75,28 @@ agx_ros/
       * JetPack 6.0+
       * Docker Engine
 
-### 2\. Setup Remote Connection (PC -\> AGX)
+### 2\. Configuration Setup
+
+Before deploying, create the environment configuration file. Do not commit `.env.agx` to GitHub if it contains sensitive info.
+
+```bash
+# Copy example to production config
+cp .env.example .env.agx
+
+# Edit .env.agx with your specific settings (e.g., ARCH=linux/arm64)
+```
+
+### 3\. Setup Remote Connection (PC -\> AGX)
 
 Configure the Docker Context on your PC to enable remote deployment.
 
 ```bash
-# 1. Setup SSH Key-based Authentication (Assuming AGX IP is 192.168.200.112)
-ssh-copy-id systemlabagx@192.168.200.112
+# 1. Setup SSH Key-based Authentication
+# Replace <AGX_IP> with your actual AGX WiFi IP (e.g., 192.168.200.112)
+ssh-copy-id systemlabagx@<AGX_IP>
 
 # 2. Create Docker Remote Context
-docker context create agx_remote --docker "host=ssh://systemlabagx@192.168.200.112"
+docker context create agx_remote --docker "host=ssh://systemlabagx@<AGX_IP>"
 
 # 3. Verify Connection
 docker --context agx_remote info
@@ -130,9 +152,9 @@ This project uses **Foxglove Studio** instead of RViz for remote monitoring.
 1.  **Open Foxglove Studio** (On PC).
 2.  **Connection Setup**:
       * Source: `Foxglove WebSocket`
-      * URL: `ws://192.168.200.112:8765` (AGX WiFi IP)
+      * URL: `ws://<AGX_IP>:8765` (Replace `<AGX_IP>` with your AGX WiFi IP)
 3.  **Common Topics**:
-      * `Map`: `/globalmap` (PointCloud2)
+      * `Map`: `/globalmap` (PointCloud2) - *Note: Latched topic, may require node restart to appear.*
       * `LiDAR`: `/velodyne_points` (PointCloud2)
       * `Path`: `/global_path` (MarkerArray)
       * `Robot`: `/tf`
@@ -145,11 +167,11 @@ This project uses **Foxglove Studio** instead of RViz for remote monitoring.
 
 ### Velodyne LiDAR Setup
 
-The LiDAR uses Ethernet UDP. You must configure the AGX's wired interface (`eth0`) to a separate subnet.
+The LiDAR uses Ethernet UDP. You must configure the AGX's wired interface (`eth0`) to a separate subnet to avoid conflicts with the WiFi management network.
 
-  * **LiDAR IP**: `192.168.1.201`
-  * **AGX eth0 IP**: `192.168.1.77` (Manual Static IP)
-  * **Docker Port Mapping**: `2368:2368/udp`
+  * **LiDAR IP**: `192.168.1.201` (Default Factory IP)
+  * **AGX eth0 IP**: Configure to `192.168.1.x` (Manual Static IP, e.g., `192.168.1.77`)
+  * **Docker Port Mapping**: `2368:2368/udp` is required in `docker-compose.yaml`.
 
 -----
 

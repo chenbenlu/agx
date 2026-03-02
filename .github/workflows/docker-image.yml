@@ -17,6 +17,17 @@ jobs:
       with:
         submodules: recursive
         
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+        
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
       
@@ -37,4 +48,7 @@ jobs:
           echo "Verifying build for $file in context $dir"
           echo "========================================"
           docker build "$dir" -f "$file"
+          # 立即清理建置暫存與映象檔，避免下一次 build 時 No space left on device
+          docker system prune -a -f
+          docker builder prune -a -f
         done

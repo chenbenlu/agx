@@ -14,5 +14,21 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build All Services
-      run: docker compose build
+    - name: Lint all Dockerfiles (Syntax Verification)
+      run: |
+        # 使用 hadolint 檢查所有 Dockerfile 的語法與最佳實踐
+        find . -name "*Dockerfile*" -type f | while read -r file; do
+          echo "Linting $file..."
+          docker run --rm -i hadolint/hadolint < "$file" || echo "Found warnings in $file but continuing..."
+        done
+
+    - name: Build all Dockerfiles (Build Verification)
+      run: |
+        # 尋找所有 Dockerfile 並嘗試 Build 來驗證是否能成功建置
+        find . -name "Dockerfile*" -type f | while read -r file; do
+          dir=$(dirname "$file")
+          echo "========================================"
+          echo "Verifying build for $file in context $dir"
+          echo "========================================"
+          docker build "$dir" -f "$file"
+        done

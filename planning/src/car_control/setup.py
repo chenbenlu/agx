@@ -11,9 +11,12 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         # Launch files
-        ('share/' + package_name + '/launch', ['launch/car_sensor.launch.py']),
+        ('share/' + package_name + '/launch', ['launch/car_sensor.launch.py', 'launch/slam_bringup.launch.py']),
         # yaml config files
-        ('share/' + package_name + '/config', ['config/car_controller.yaml']),
+        ('share/' + package_name + '/config', [
+            'config/car_controller.yaml',
+            'config/mapper_params_online_async.yaml'
+        ]),
         # rviz config files
         ('share/' + package_name + '/config', ['config/car_odom.rviz']),
     ],  

@@ -6,7 +6,7 @@
   # =========================================
     nanollm:
       build:
-        context: ./nanollm
+        context: ./
         dockerfile: Dockerfile
       image: agx_ros/nanollm:latest
       container_name: nanollm

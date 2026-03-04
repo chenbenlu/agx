@@ -26,6 +26,7 @@ elif [ "$ARCH" = "x86_64" ]; then
     fi
 fi
 ```
+### Lidar啟動測試
 ```bash
 ros2 launch urg_node2 urg_node2.launch.py
 ```

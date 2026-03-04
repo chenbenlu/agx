@@ -1,0 +1,17 @@
+services:
+  # =========================================
+  # 資料視覺化 (Foxglove)
+  # =========================================
+  visualization:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: agx_ros/visualization:latest
+    container_name: foxglove
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+      - ROS_HOSTNAME=${HOST_IP}
+    restart: unless-stopped
+    command: >
+      /bin/bash -c "source /opt/ros/humble/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args -p send_buffer_limit:=100000000"

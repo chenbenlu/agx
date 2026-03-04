@@ -1,0 +1,32 @@
+services:
+  # =========================================
+  # ROS 2 高階規劃 (Planning)
+  # =========================================
+  planning:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: agx_ros/planning:latest
+    container_name: planning
+    network_mode: host
+    privileged: true
+    runtime: nvidia
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - ROS_HOSTNAME=${HOST_IP}
+      - DISPLAY=${DISPLAY}
+      - XAUTHORITY=/tmp/.docker.xauth
+
+    volumes:
+      - /dev:/dev
+      - /run/jtop.stats.sock:/run/jtop.stats.sock
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+    tty: true
+    stdin_open: true

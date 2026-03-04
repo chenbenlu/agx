@@ -1,0 +1,23 @@
+services:
+  # =========================================
+  # ROS 1 <-> ROS 2 橋樑 (Bridge)
+  # =========================================
+  bridge:
+    platform: ${ARCH:-linux/amd64}
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: agx_ros/bridge:latest
+    container_name: bridge
+    restart: on-failure
+    network_mode: host
+    environment:
+      - ROS_MASTER_URI=http://${HOST_IP}:11311
+      - ROS_HOSTNAME=${HOST_IP}
+      - ROS_DOMAIN_ID=0
+    tty: true
+    stdin_open: true
+    command: >
+      bash -c "source /opt/ros/noetic/setup.bash &&
+               source /opt/ros/foxy/setup.bash &&
+               ros2 run ros1_bridge dynamic_bridge --bridge-all-1to2-topics --bridge-all-2to1-topics"

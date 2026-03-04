@@ -1,0 +1,27 @@
+services:
+  # =========================================
+  # ROS 1 底層控制 (control)
+  # =========================================
+  control:
+    platform: ${ARCH:-linux/amd64}
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: agx_ros/control
+    container_name: control
+    network_mode: host
+    privileged: true
+    environment:
+      - ROS_MASTER_URI=http://${HOST_IP}:11311
+      - ROS_IP=${HOST_IP}
+      - DISPLAY=${DISPLAY}
+      - XAUTHORITY=/tmp/.docker.xauth
+    volumes:
+      - /dev:/dev
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      - /home/systemlabagx/disk/Lun_RL_ws/src/six_wheels_teleop:/root/keyboard_control_ws/src/six_wheels_teleop
+    tty: true
+    stdin_open: true

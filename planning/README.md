@@ -29,3 +29,20 @@ fi
 ```bash
 ros2 launch urg_node2 urg_node2.launch.py
 ```
+
+### SLAM bringup
+```bash
+ros2 launch car_control slam_bringup.launch.py
+```
+
+### keyboard control
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard
+```
+
+### save map
+```bash
+ros2 run nav2_map_server map_saver_cli -f /root/ros2_ws/src/car_control/config/my_map
+```
+
+

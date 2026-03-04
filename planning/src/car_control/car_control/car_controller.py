@@ -48,6 +48,8 @@ class car:
 
         # 速度1每秒的速度 = (pi * 車輪直徑 / 一圈的脈衝數) * 速度1每秒的脈衝數
         self.speed_1_every_second_speed = (math.pi * Tire_diameter / Total_pulses) / 10
+        # 每個脈衝對應的行駛距離 (米)
+        self.distance_per_pulse = math.pi * Tire_diameter / Total_pulses
     def car_diff_wheel_set_speed(self, linear_x, angular_z):    # 差速輪速度換算並執行 速度(線性速度,轉速度)
         # 差速輪的速度計算
         left_speed = linear_x - (self.car_distance / 2) * angular_z
@@ -105,6 +107,21 @@ class car:
         response = self.Drive.read(8)
         #print(f"Received: {response.hex()}")
         # '''
+    def read_drive_position(self, slave_id):  # 讀取驅動器編碼器位置 (暫存器 0x0024, 2 registers = 4 bytes int32)
+        function_code = 0x03  # 讀取保持暫存器
+        register_address = 0x0024
+        num_registers = 2  # 讀 2 個 register = 4 bytes (long)
+        frame = struct.pack('>B B H H', slave_id, function_code, register_address, num_registers)
+        full_packet = frame + self.calc_crc(frame)
+        self.Drive.reset_input_buffer()  # 清除殘留資料
+        self.Drive.write(full_packet)
+        # 回應格式: id(1) + 03(1) + 04(1) + data(4) + crc(2) = 9 bytes
+        response = self.Drive.read(9)
+        if len(response) < 9:
+            return None
+        # 取出 4 bytes 資料, 轉為 signed int32 (big-endian)
+        position = struct.unpack('>i', response[3:7])[0]
+        return position
     def calc_crc(self, data: bytes) -> bytes:   # 計算 CRC-16
         crc = 0xFFFF
         for b in data:
@@ -157,6 +174,8 @@ class ros2_car(Node):
         self.declare_parameter('odom_up_hz', 10)
         self.declare_parameter('car_mode', 'diff')  # 'car_diff_wheel' or 'car_mecanum_wheel'
         self.declare_parameter('usb_port', '/dev/car')  # USB port for the car controller
+        # 是否啟用編碼器回授 (True: 從驅動器讀取實際位置, False: 使用開迴路 cmd_vel 積分)
+        self.declare_parameter('use_encoder_feedback', True)
         #  -------------
 
         #   參數放入
@@ -167,6 +186,7 @@ class ros2_car(Node):
         usb_port = self.get_parameter('usb_port').value
         self.odom_up_hz = self.get_parameter('odom_up_hz').value
         self.car_mode = self.get_parameter('car_mode').value
+        self.use_encoder_feedback = self.get_parameter('use_encoder_feedback').value
         #   -------
         
         #   顯示參數
@@ -177,10 +197,15 @@ class ros2_car(Node):
         self.get_logger().info(f'usb_port: {usb_port}')
         self.get_logger().info(f'odom_up_hz: {self.odom_up_hz}')
         self.get_logger().info(f'car_mode: {self.car_mode}')
+        self.get_logger().info(f'use_encoder_feedback: {self.use_encoder_feedback}')
         #   -------
 
         self.car = car()
         self.car.car_init(car_distance = car_distance , Tire_diameter = Tire_diameter , encoder_resolution = encoder_resolution , gear_ratio = gear_ratio, usb_port = usb_port)  # 初始化車控參數
+
+        # 編碼器位置追蹤 (用於計算 delta)
+        self.last_left_pos = None
+        self.last_right_pos = None
         # --------
 
     def cmd_vel_callback(self, msg):    # 訂閱要執行的速度訊息
@@ -196,9 +221,35 @@ class ros2_car(Node):
             current_time = self.get_clock().now().to_msg()
             # 計算odom
             dt = (current_time.sec + current_time.nanosec * 1e-9) - (self.last_time.sec + self.last_time.nanosec * 1e-9)
-            delta_x = (self.linear_x * math.cos(self.theta) - self.linear_y * math.sin(self.theta)) * dt
-            delta_y = (self.linear_x * math.sin(self.theta) + self.linear_y * math.cos(self.theta)) * dt
-            delta_th = self.angular_z * dt
+
+            # 決定用於 odom 積分的速度來源
+            odom_vx = self.linear_x
+            odom_vy = self.linear_y
+            odom_wz = self.angular_z
+
+            if self.use_encoder_feedback and self.car_mode == 'diff' and dt > 0:
+                # 從驅動器讀取實際編碼器位置 (閉迴路)
+                left_pos = self.car.read_drive_position(0x01)
+                right_pos = self.car.read_drive_position(0x02)
+                if left_pos is not None and right_pos is not None:
+                    if self.last_left_pos is not None and self.last_right_pos is not None:
+                        # 計算脈衝差
+                        delta_left = left_pos - self.last_left_pos
+                        delta_right = right_pos - self.last_right_pos
+                        # 脈衝差 -> 行駛距離 (米)
+                        dist_left = delta_left * self.car.distance_per_pulse
+                        dist_right = delta_right * self.car.distance_per_pulse
+                        # 差速輪逆運動學: 從左右輪距離反推車體速度
+                        odom_vx = (dist_right + dist_left) / (2.0 * dt)
+                        odom_vy = 0.0
+                        odom_wz = (dist_right - dist_left) / (self.car.car_distance * dt)
+                    # 更新上一次位置
+                    self.last_left_pos = left_pos
+                    self.last_right_pos = right_pos
+
+            delta_x = (odom_vx * math.cos(self.theta) - odom_vy * math.sin(self.theta)) * dt
+            delta_y = (odom_vx * math.sin(self.theta) + odom_vy * math.cos(self.theta)) * dt
+            delta_th = odom_wz * dt
             self.x += delta_x
             self.y += delta_y
             self.theta += delta_th
@@ -232,9 +283,9 @@ class ros2_car(Node):
             odom.pose.pose.orientation.y = q[1]
             odom.pose.pose.orientation.z = q[2]
             odom.pose.pose.orientation.w = q[3]
-            odom.twist.twist.linear.x = self.linear_x
-            odom.twist.twist.linear.y = self.linear_y
-            odom.twist.twist.angular.z = self.angular_z
+            odom.twist.twist.linear.x = odom_vx
+            odom.twist.twist.linear.y = odom_vy
+            odom.twist.twist.angular.z = odom_wz
             self.odom_pub.publish(odom)
             self.last_time = current_time
             

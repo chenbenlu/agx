@@ -31,7 +31,18 @@ def generate_launch_description():
         )
     )
 
-    # 3. 建立靜態 TF: base_link -> laser
+    # 3a. Fallback 靜態 TF: odom -> base_link
+    #     當 car_controller_node 未連接車體時，提供一個靜止的 odom frame
+    #     讓 slam_toolbox 能正常運作（僅用於測試，實車時 car_controller 會覆蓋）
+    odom_to_base_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='odom_to_base_fallback',
+        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'odom', 'base_link'],
+        output='screen'
+    )
+
+    # 3b. 建立靜態 TF: base_link -> laser
     #    格式: [x, y, z, yaw, pitch, roll, frame_id, child_frame_id]
     #    請根據實際雷達裝設的位置自行微調數值(如向前挪 15 公分、墊高 20 公分等)
     base_to_laser_tf = Node(
@@ -64,6 +75,7 @@ def generate_launch_description():
     return LaunchDescription([
         car_sensor_launch,
         urg_node_launch,
+        odom_to_base_tf,
         base_to_laser_tf,
         slam_toolbox_launch
     ])

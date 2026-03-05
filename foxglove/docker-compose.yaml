@@ -8,10 +8,8 @@ services:
       dockerfile: Dockerfile
     image: agx_ros/visualization:latest
     container_name: foxglove
-    network_mode: host
     environment:
       - ROS_DOMAIN_ID=0
-      - ROS_HOSTNAME=${HOST_IP}
     restart: unless-stopped
     command: >
-      /bin/bash -c "source /opt/ros/humble/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args -p send_buffer_limit:=100000000"
+      /bin/bash -c "source /opt/ros/humble/setup.bash && ros2 run foxglove_bridge foxglove_bridge --ros-args -p send_buffer_limit:=100000000 -p address:=0.0.0.0 -p port:=8765"

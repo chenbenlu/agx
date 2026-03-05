@@ -1,0 +1,4 @@
+services:
+  visualization:
+    ports:
+      - "8765:8765"

@@ -14,9 +14,19 @@ RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
 RUN apt-get install -y \
     ros-noetic-ros-comm \
     ros-foxy-ros1-bridge \
-    ros-foxy-rmw-cyclonedds-cpp \
     && rm -rf /var/lib/apt/lists/*
 
-ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+COPY fastdds.xml /fastdds.xml
+ENV FASTRTPS_DEFAULT_PROFILES_FILE=/fastdds.xml
+ENV RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+
+RUN sed -i '1i source /opt/ros/noetic/setup.bash' /root/.bashrc && \
+    sed -i '2i source /opt/ros/foxy/setup.bash' /root/.bashrc && \
+    sed -i '3i export RMW_IMPLEMENTATION=rmw_fastrtps_cpp' /root/.bashrc && \
+    sed -i '4i export FASTRTPS_DEFAULT_PROFILES_FILE=/fastdds.xml' /root/.bashrc
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # 4. 預設指令 (也可以在 compose 覆寫)
 CMD ["bash"]

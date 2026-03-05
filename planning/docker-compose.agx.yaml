@@ -1,0 +1,4 @@
+services:
+  planning:
+    network_mode: host
+    runtime: nvidia

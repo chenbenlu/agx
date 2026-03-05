@@ -94,8 +94,13 @@ RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
     --cmake-args -DCMAKE_BUILD_TYPE=Release \
     --parallel-workers $(nproc)"
 
+# COPY entrypoint.sh AND fastdds.xml
+COPY fastdds.xml /fastdds.xml
 COPY entrypoint.sh /root/entrypoint.sh
 RUN chmod +x /root/entrypoint.sh
+
+ENV FASTRTPS_DEFAULT_PROFILES_FILE=/fastdds.xml
+ENV RMW_IMPLEMENTATION=rmw_fastrtps_cpp
 
 WORKDIR /root
 ENTRYPOINT ["/root/entrypoint.sh"]

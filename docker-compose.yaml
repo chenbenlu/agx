@@ -1,14 +1,23 @@
 # ==============================================================================
-#  AGX ROS - 根目錄 Orchestrator
-#  透過 include 引入各子任務的 docker-compose.yaml
-#  可用 docker compose up -d 一次啟動全部
-#  或到各子目錄 docker compose up -d 單獨啟動
+#  AGX ROS - 根目錄 Orchestrator (AGX 實機)
+#  各服務加上 .agx.yaml override 啟用 network_mode: host
 # ==============================================================================
 
 include:
-  - path: ./control/docker-compose.yaml
-  - path: ./bridge/docker-compose.yaml
-  - path: ./planning/docker-compose.yaml
-  - path: ./foxglove/docker-compose.yaml
+  - path:
+      - ./roscore/docker-compose.yaml
+      - ./roscore/docker-compose.agx.yaml
+  - path:
+      - ./control/docker-compose.yaml
+      - ./control/docker-compose.agx.yaml
+  - path:
+      - ./bridge/docker-compose.yaml
+      - ./bridge/docker-compose.agx.yaml
+  - path:
+      - ./planning/docker-compose.yaml
+      - ./planning/docker-compose.agx.yaml
+  - path:
+      - ./foxglove/docker-compose.yaml
+      - ./foxglove/docker-compose.agx.yaml
   - path: ./vlm/docker-compose.yaml
   - path: ./nanollm/docker-compose.yaml

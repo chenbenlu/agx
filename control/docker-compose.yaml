@@ -9,11 +9,13 @@ services:
       dockerfile: Dockerfile
     image: agx_ros/control
     container_name: control
-    network_mode: host
     privileged: true
+    depends_on:
+      - roscore
     environment:
-      - ROS_MASTER_URI=http://${HOST_IP}:11311
-      - ROS_IP=${HOST_IP}
+      - ROS_MASTER_URI=http://roscore:11311
+      - ROS_HOSTNAME=control
+      - AUTO_ROSCORE=false
       - DISPLAY=${DISPLAY}
       - XAUTHORITY=/tmp/.docker.xauth
     volumes:

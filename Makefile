@@ -15,20 +15,22 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 CURRENT_CONTEXT := $(shell docker context show)
 MODE := pc
 ENV_FILE := .env
+COMPOSE_FILE := docker-compose.pc.yaml
 
 ifneq (,$(findstring agx,$(CURRENT_CONTEXT)))
     MODE := agx
     ENV_FILE := .env.agx
+    COMPOSE_FILE := docker-compose.yaml
 else ifeq ($(shell uname -m), aarch64)
     MODE := agx
     ENV_FILE := .env.agx
+    COMPOSE_FILE := docker-compose.yaml
 endif
 
 # --- [Compose Commands] ---
 # 根目錄 orchestrator (全部)
-COMPOSE_CMD := docker compose --env-file $(ENV_FILE) -p $(PROJECT_NAME)
+COMPOSE_CMD := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) -p $(PROJECT_NAME)
 # 子目錄 (指定 service via s=xxx)
-# 用法: make up-one s=planning
 COMPOSE_SUB = docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $(s)/docker-compose.yaml -p $(PROJECT_NAME)
 
 TASK_EXEC   := docker exec -it $(TASK_CONTAINER) bash -ic
@@ -159,16 +161,17 @@ endef
 export SCRIPT_VIEW
 
 # --- [Service List] ---
-SERVICES := control bridge planning foxglove vlm nanollm
+SERVICES := roscore control bridge planning foxglove vlm nanollm
 
 # --- [共通選單 Header] ---
 define SERVICE_MENU
-    echo "1) control    - ROS 1 底層控制"
-    echo "2) bridge     - ROS 1 <-> ROS 2 橋樑"
-    echo "3) planning   - ROS 2 高階規劃"
-    echo "4) foxglove   - 資料視覺化"
-    echo "5) vlm        - Isaac ROS 視覺加速"
-    echo "6) nanollm    - Nano LLM"
+    echo "1) roscore    - ROS 1 Master"
+    echo "2) control    - ROS 1 底層控制"
+    echo "3) bridge     - ROS 1 <-> ROS 2 橋樑"
+    echo "4) planning   - ROS 2 高階規劃"
+    echo "5) foxglove   - 資料視覺化"
+    echo "6) vlm        - Isaac ROS 視覺加速"
+    echo "7) nanollm    - Nano LLM"
 endef
 
 # 5. UP SCRIPT (多選)
@@ -180,7 +183,7 @@ define SCRIPT_UP
     echo "------------------------------------------"
     echo "a) Start ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-6/a/q, 可多選如 1 3 5]: " INPUT
+    read -p "Select service(s) [1-7/a/q, 可多選如 1 3 5]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Starting ALL services..."
@@ -189,13 +192,14 @@ define SCRIPT_UP
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="control bridge planning foxglove vlm nanollm"
+    FOLDERS="roscore control bridge planning foxglove vlm nanollm"
     COUNT=0
     for c in $$CHOICES; do
         TARGET=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
         if [ -z "$$TARGET" ]; then echo "[Warn] Skipping invalid: $$c"; continue; fi
         echo "[Info] Starting $$TARGET..."
-        docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $$TARGET/docker-compose.yaml -p $(PROJECT_NAME) up -d
+        EXTRA_F=""; if [ -f $$TARGET/docker-compose.$(MODE).yaml ]; then EXTRA_F="-f $$TARGET/docker-compose.$(MODE).yaml"; fi
+        docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $$TARGET/docker-compose.yaml $$EXTRA_F -p $(PROJECT_NAME) up -d
         COUNT=$$((COUNT + 1))
     done
     echo "[Info] $$COUNT service(s) started."
@@ -211,7 +215,7 @@ define SCRIPT_DOWN
     echo "------------------------------------------"
     echo "a) Stop ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-6/a/q, 可多選如 1 3 5]: " INPUT
+    read -p "Select service(s) [1-7/a/q, 可多選如 1 3 5]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Stopping ALL services..."
@@ -220,13 +224,14 @@ define SCRIPT_DOWN
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="control bridge planning foxglove vlm nanollm"
+    FOLDERS="roscore control bridge planning foxglove vlm nanollm"
     COUNT=0
     for c in $$CHOICES; do
         TARGET=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
         if [ -z "$$TARGET" ]; then echo "[Warn] Skipping invalid: $$c"; continue; fi
         echo "[Info] Stopping $$TARGET..."
-        docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $$TARGET/docker-compose.yaml -p $(PROJECT_NAME) down --remove-orphans
+        EXTRA_F=""; if [ -f $$TARGET/docker-compose.$(MODE).yaml ]; then EXTRA_F="-f $$TARGET/docker-compose.$(MODE).yaml"; fi
+        docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $$TARGET/docker-compose.yaml $$EXTRA_F -p $(PROJECT_NAME) down
         COUNT=$$((COUNT + 1))
     done
     echo "[Info] $$COUNT service(s) stopped."
@@ -242,7 +247,7 @@ define SCRIPT_BUILD
     echo "------------------------------------------"
     echo "a) Build ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-6/a/q, 可多選如 1 3 5]: " INPUT
+    read -p "Select service(s) [1-7/a/q, 可多選如 1 3 5]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Building ALL images..."
@@ -251,13 +256,14 @@ define SCRIPT_BUILD
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="control bridge planning foxglove vlm nanollm"
+    FOLDERS="roscore control bridge planning foxglove vlm nanollm"
     COUNT=0
     for c in $$CHOICES; do
         TARGET=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
         if [ -z "$$TARGET" ]; then echo "[Warn] Skipping invalid: $$c"; continue; fi
         echo "[Info] Building $$TARGET..."
-        docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $$TARGET/docker-compose.yaml -p $(PROJECT_NAME) build
+        EXTRA_F=""; if [ -f $$TARGET/docker-compose.$(MODE).yaml ]; then EXTRA_F="-f $$TARGET/docker-compose.$(MODE).yaml"; fi
+        docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $$TARGET/docker-compose.yaml $$EXTRA_F -p $(PROJECT_NAME) build
         COUNT=$$((COUNT + 1))
     done
     echo "[Info] $$COUNT image(s) built."
@@ -273,7 +279,7 @@ define SCRIPT_REBUILD
     echo "------------------------------------------"
     echo "a) Rebuild ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-6/a/q, 可多選如 1 3 5]: " INPUT
+    read -p "Select service(s) [1-7/a/q, 可多選如 1 3 5]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Rebuilding ALL services..."
@@ -282,13 +288,14 @@ define SCRIPT_REBUILD
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="control bridge planning foxglove vlm nanollm"
+    FOLDERS="roscore control bridge planning foxglove vlm nanollm"
     COUNT=0
     for c in $$CHOICES; do
         TARGET=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
         if [ -z "$$TARGET" ]; then echo "[Warn] Skipping invalid: $$c"; continue; fi
         echo "[Info] Rebuilding $$TARGET..."
-        docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $$TARGET/docker-compose.yaml -p $(PROJECT_NAME) up -d --build --force-recreate
+        EXTRA_F=""; if [ -f $$TARGET/docker-compose.$(MODE).yaml ]; then EXTRA_F="-f $$TARGET/docker-compose.$(MODE).yaml"; fi
+        docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $$TARGET/docker-compose.yaml $$EXTRA_F -p $(PROJECT_NAME) up -d --build --force-recreate
         COUNT=$$((COUNT + 1))
     done
     echo "[Info] $$COUNT service(s) rebuilt."
@@ -304,6 +311,7 @@ help: ## Show available commands
 	echo "   Task Target: $(TASK_CONTAINER)"
 	echo "   Context:     $(CURRENT_CONTEXT)"
 	echo "   Mode:        $(MODE)"
+	echo "   Compose:     $(COMPOSE_FILE)"
 	echo "================================================"
 	echo ""
 	echo "--- Docker 服務 (互動式選單) ---"
@@ -356,7 +364,10 @@ ps: ## View all container status
 	$(COMPOSE_CMD) ps
 
 dashboard: ## Launch Web Dashboard (port 8080)
-	python3 dashboard.py
+	docker compose --env-file $(ENV_FILE) -f dashboard/docker-compose.yaml -p $(PROJECT_NAME) up -d --build
+	@echo ""
+	@echo "  🚀 Dashboard: http://localhost:8080"
+	@echo ""
 
 clean: ## Remove all containers and images
 	$(COMPOSE_CMD) down --rmi local -v --remove-orphans

@@ -134,7 +134,10 @@ The LiDAR uses Ethernet UDP. You must configure the AGX's wired interface (`eth0
 
   * **Docker Port Mapping**: `2368:2368/udp`
 
-
+## Dashboard
+```bash
+python3 dashboard.py --port 8080
+```
 
 -----
 

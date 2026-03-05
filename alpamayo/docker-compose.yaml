@@ -1,0 +1,27 @@
+services:
+# =========================================
+# 7. Alpamayo 服務 (Python 3.12)
+# 參考: https://github.com/NVlabs/alpamayo
+# =========================================
+  alpamayo:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: agx_ros/alpamayo:latest
+    container_name: alpamayo
+    runtime: nvidia
+    network_mode: host
+    ipc: host
+    shm_size: "16g"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HF_HOME=/data/hf
+      - TRANSFORMERS_CACHE=/data/hf
+    volumes:
+      - /home/systemlabagx/disk/workspaces/data:/data
+      - /home/systemlabagx/disk/workspaces/data/alpamayo:/workspace
+    working_dir: /opt/alpamayo
+    stdin_open: true
+    tty: true
+    command: ["bash", "-lc", "sleep infinity"]

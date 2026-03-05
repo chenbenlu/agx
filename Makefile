@@ -161,7 +161,7 @@ endef
 export SCRIPT_VIEW
 
 # --- [Service List] ---
-SERVICES := roscore control bridge planning foxglove vlm nanollm
+SERVICES := roscore control bridge planning foxglove vlm nanollm alpamayo
 
 # --- [共通選單 Header] ---
 define SERVICE_MENU
@@ -172,6 +172,7 @@ define SERVICE_MENU
     echo "5) foxglove   - 資料視覺化"
     echo "6) vlm        - Isaac ROS 視覺加速"
     echo "7) nanollm    - Nano LLM"
+    echo "8) alpamayo   - Alpamayo Python 3.12"
 endef
 
 # 5. UP SCRIPT (多選)
@@ -183,7 +184,7 @@ define SCRIPT_UP
     echo "------------------------------------------"
     echo "a) Start ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-7/a/q, 可多選如 1 3 5]: " INPUT
+    read -p "Select service(s) [1-8/a/q, 可多選如 1 3 5]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Starting ALL services..."
@@ -192,7 +193,7 @@ define SCRIPT_UP
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="roscore control bridge planning foxglove vlm nanollm"
+    FOLDERS="roscore control bridge planning foxglove vlm nanollm alpamayo"
     COUNT=0
     for c in $$CHOICES; do
         TARGET=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -224,7 +225,7 @@ define SCRIPT_DOWN
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="roscore control bridge planning foxglove vlm nanollm"
+    FOLDERS="roscore control bridge planning foxglove vlm nanollm alpamayo"
     COUNT=0
     for c in $$CHOICES; do
         TARGET=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -247,7 +248,7 @@ define SCRIPT_BUILD
     echo "------------------------------------------"
     echo "a) Build ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-7/a/q, 可多選如 1 3 5]: " INPUT
+    read -p "Select service(s) [1-8/a/q, 可多選如 1 3 5]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Building ALL images..."
@@ -256,7 +257,7 @@ define SCRIPT_BUILD
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="roscore control bridge planning foxglove vlm nanollm"
+    FOLDERS="roscore control bridge planning foxglove vlm nanollm alpamayo"
     COUNT=0
     for c in $$CHOICES; do
         TARGET=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -288,7 +289,7 @@ define SCRIPT_REBUILD
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="roscore control bridge planning foxglove vlm nanollm"
+    FOLDERS="roscore control bridge planning foxglove vlm nanollm alpamayo"
     COUNT=0
     for c in $$CHOICES; do
         TARGET=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")

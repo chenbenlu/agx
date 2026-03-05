@@ -21,3 +21,4 @@ include:
       - ./foxglove/docker-compose.agx.yaml
   - path: ./vlm/docker-compose.yaml
   - path: ./nanollm/docker-compose.yaml
+  - path: ./alpamayo/docker-compose.yaml

@@ -17,12 +17,18 @@ from urllib.parse import urlparse, parse_qs
 # --- Configuration ---
 PROJECT_NAME = "agx_ros"
 SERVICES = {
-    "control":  {"name": "ROS 1 底層控制",    "container": "control",   "icon": "🎮"},
-    "bridge":   {"name": "ROS 1↔2 橋樑",     "container": "bridge",    "icon": "🌉"},
-    "planning": {"name": "ROS 2 高階規劃",    "container": "planning",  "icon": "🧭"},
-    "foxglove": {"name": "資料視覺化",        "container": "foxglove",  "icon": "📊"},
-    "vlm":      {"name": "Isaac ROS 視覺加速", "container": "isaac_ros", "icon": "👁️"},
-    "nanollm":  {"name": "Nano LLM",          "container": "nanollm",   "icon": "🤖"},
+    # ROS 1
+    "roscore":        {"name": "ROS 1 Master",       "container": "roscore",       "icon": "🖥️", "service": "roscore"},
+    "control":        {"name": "ROS 1 底層控制",     "container": "control",       "icon": "🎮", "service": "control"},
+    "bridge":         {"name": "ROS 1↔2 橋樑",       "container": "bridge",        "icon": "🌉", "service": "bridge"},
+    "foxglove_ros1":  {"name": "ROS 1 資料視覺化",   "container": "foxglove_ros1", "icon": "📊", "service": "foxglove"},
+    
+    # ROS 2 & AI
+    "planning":       {"name": "ROS 2 高階規劃",     "container": "planning",      "icon": "🧭", "service": "planning"},
+    "foxglove":       {"name": "ROS 2 資料視覺化",   "container": "foxglove",      "icon": "📊", "service": "visualization"},
+    "vlm":            {"name": "Isaac ROS 視覺加速", "container": "vlm",           "icon": "👁️", "service": "vlm"},
+    "nanollm":        {"name": "Nano LLM",           "container": "nanollm",       "icon": "🤖", "service": "nanollm"},
+    "alpamayo":       {"name": "Alpamayo",           "container": "alpamayo",      "icon": "🦙", "service": "alpamayo"},
 }
 
 TASKS = {
@@ -66,6 +72,7 @@ def detect_env():
     return "pc", ".env"
 
 MODE, ENV_FILE = detect_env()
+COMPOSE_FILE = "docker-compose.pc.yaml" if MODE == "pc" else "docker-compose.yaml"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 cmd_process_pipe = None
@@ -146,9 +153,9 @@ def get_tmux_sessions():
     return []
 
 
-def compose_cmd_for(folder):
+def compose_cmd_for():
     return (f'docker compose --env-file {os.path.join(PROJECT_DIR, ENV_FILE)} '
-            f'-f {folder}/docker-compose.yaml -p {PROJECT_NAME}')
+            f'-f {os.path.join(PROJECT_DIR, COMPOSE_FILE)} -p {PROJECT_NAME}')
 
 
 # --- API Handlers ---
@@ -161,31 +168,35 @@ def handle_api(path, params):
         return {"containers": containers, "sessions": sessions, "mode": MODE}
 
     elif action == "service/up":
-        folder = params.get("folder", [None])[0]
-        if not folder or folder not in SERVICES:
+        service_id = params.get("folder", [None])[0]
+        if not service_id or service_id not in SERVICES:
             return {"ok": False, "error": "Invalid service"}
-        r = run_cmd(f'{compose_cmd_for(folder)} up -d', timeout=120)
+        service_name = SERVICES[service_id].get("service", service_id)
+        r = run_cmd(f'{compose_cmd_for()} up -d {service_name}', timeout=120)
         return r
 
     elif action == "service/down":
-        folder = params.get("folder", [None])[0]
-        if not folder or folder not in SERVICES:
+        service_id = params.get("folder", [None])[0]
+        if not service_id or service_id not in SERVICES:
             return {"ok": False, "error": "Invalid service"}
-        r = run_cmd(f'{compose_cmd_for(folder)} down --remove-orphans', timeout=60)
+        service_name = SERVICES[service_id].get("service", service_id)
+        r = run_cmd(f'{compose_cmd_for()} rm -s -v -f {service_name}', timeout=60)
         return r
 
     elif action == "service/build":
-        folder = params.get("folder", [None])[0]
-        if not folder or folder not in SERVICES:
+        service_id = params.get("folder", [None])[0]
+        if not service_id or service_id not in SERVICES:
             return {"ok": False, "error": "Invalid service"}
-        r = run_cmd(f'{compose_cmd_for(folder)} build', timeout=600)
+        service_name = SERVICES[service_id].get("service", service_id)
+        r = run_cmd(f'{compose_cmd_for()} build {service_name}', timeout=600)
         return r
 
     elif action == "service/rebuild":
-        folder = params.get("folder", [None])[0]
-        if not folder or folder not in SERVICES:
+        service_id = params.get("folder", [None])[0]
+        if not service_id or service_id not in SERVICES:
             return {"ok": False, "error": "Invalid service"}
-        r = run_cmd(f'{compose_cmd_for(folder)} up -d --build --force-recreate', timeout=600)
+        service_name = SERVICES[service_id].get("service", service_id)
+        r = run_cmd(f'{compose_cmd_for()} up -d --build --force-recreate {service_name}', timeout=600)
         return r
 
     elif action == "service/all-up":
@@ -781,7 +792,7 @@ function renderServices() {
           <span class="card-icon">${svc.icon}</span>
           <div>
             <div class="card-name">${svc.name}</div>
-            <div class="card-folder">${folder}/</div>
+            <div class="card-folder">${folder}</div>
           </div>
         </div>
         <div class="status-dot ${state}"></div>

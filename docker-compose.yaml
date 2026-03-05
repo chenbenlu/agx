@@ -5,14 +5,9 @@
 
 include:
   - path:
-      - ./roscore/docker-compose.yaml
-      - ./roscore/docker-compose.agx.yaml
-  - path:
-      - ./control/docker-compose.yaml
-      - ./control/docker-compose.agx.yaml
-  - path:
-      - ./bridge/docker-compose.yaml
-      - ./bridge/docker-compose.agx.yaml
+      - ./ros1_ws/docker-compose.yaml
+      - ./ros1_ws/docker-compose.agx.yaml
+
   - path:
       - ./planning/docker-compose.yaml
       - ./planning/docker-compose.agx.yaml

@@ -1,9 +1,9 @@
 # ==============================================================================
-#  AGX ROS Control Interface
+#  AGX ROS 1 Control Interface (ros1_ws)
 # ==============================================================================
 
 # --- [Configuration] ---
-PROJECT_NAME   := agx_ros
+PROJECT_NAME   := agx_ros_1
 TASK_CONTAINER := control
 SERVICE_NAME   ?= control
 
@@ -14,31 +14,28 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 # --- [Auto-Detection] ---
 CURRENT_CONTEXT := $(shell docker context show)
 MODE := pc
-ENV_FILE := .env
+ENV_FILE := ../.env
 COMPOSE_FILE := docker-compose.pc.yaml
 
 ifneq (,$(findstring agx,$(CURRENT_CONTEXT)))
     MODE := agx
-    ENV_FILE := .env.agx
-    COMPOSE_FILE := docker-compose.yaml
+    ENV_FILE := ../.env.agx
+    COMPOSE_FILE := docker-compose.agx.yaml
 else ifeq ($(shell uname -m), aarch64)
     MODE := agx
-    ENV_FILE := .env.agx
-    COMPOSE_FILE := docker-compose.yaml
+    ENV_FILE := ../.env.agx
+    COMPOSE_FILE := docker-compose.agx.yaml
 endif
 
 # --- [Compose Commands] ---
-# 根目錄 orchestrator (全部)
-COMPOSE_CMD := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) -p $(PROJECT_NAME)
-# 子目錄 (指定 service via s=xxx)
-COMPOSE_SUB = docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $(s)/docker-compose.yaml -p $(PROJECT_NAME)
+COMPOSE_CMD := docker compose --env-file $(ENV_FILE) -f docker-compose.yaml -f $(COMPOSE_FILE) -p $(PROJECT_NAME)
 
 TASK_EXEC   := docker exec -it $(TASK_CONTAINER) bash -ic
 
 # --- [Make Settings] ---
 .DEFAULT_GOAL := help
 .SILENT:
-.PHONY: help build up rebuild down join logs ps clean run plan stop view dashboard guard-%
+.PHONY: help build up rebuild down join logs ps clean run stop view guard-%
 
 # ==============================================================================
 #  Logic Definitions (Shell Scripts inside Makefile)
@@ -47,7 +44,7 @@ TASK_EXEC   := docker exec -it $(TASK_CONTAINER) bash -ic
 # 1. RUN SCRIPT
 define SCRIPT_RUN
     echo "=========================================="
-    echo " AGX Task Launcher"
+    echo " AGX Task Launcher (ROS 1)"
     echo " Target: $(TASK_CONTAINER)"
     echo "=========================================="
     echo "1) Keyboard Control (agx_keyboard)"
@@ -117,8 +114,27 @@ export SCRIPT_JOIN
 
 # 3. STOP SCRIPT
 define SCRIPT_STOP
-    LIST=$$(tmux ls -F "#{session_name}" 2>/dev/null | grep -E "^(plan_)" || true)
+    LIST=$$(tmux ls -F "#{session_name}" 2>/dev/null | grep -E "^(agx_)" || true)
     if [ -z "$$LIST" ]; then echo "[Info] No active tasks running."; exit 0; fi
+    echo "=========================================="
+    echo " Select task to terminate"
+    echo "=========================================="
+    echo "$$LIST" | awk '{print NR ") " $$0}'
+    echo "a) Terminate All"
+    echo "q) Quit"
+    echo "------------------------------------------"
+    read -p "Enter number: " k_choice
+    if [ "$$k_choice" = "q" ]; then exit 0; fi
+    if [ "$$k_choice" = "a" ]; then echo "$$LIST" | xargs -n 1 tmux kill-session -t; echo "[Info] All tasks terminated."; exit 0; fi
+    TARGET=$$(echo "$$LIST" | sed -n "$${k_choice}p")
+    if [ -n "$$TARGET" ]; then tmux kill-session -t "$$TARGET"; echo "[Info] $$TARGET terminated."; else echo "[Error] Invalid number."; fi
+endef
+export SCRIPT_STOP
+
+# 4. VIEW SCRIPT
+define SCRIPT_VIEW
+    LIST=$$(tmux ls -F "#{session_name}" 2>/dev/null | grep -E "^(agx_)" || true)
+    if [ -z "$$LIST" ]; then echo "[Info] No active tasks."; exit 0; fi
     echo "=========================================="
     echo " Select task to view"
     echo "=========================================="
@@ -142,28 +158,27 @@ endef
 export SCRIPT_VIEW
 
 # --- [Service List] ---
-SERVICES := planning foxglove vlm nanollm alpamayo
+SERVICES := roscore control bridge foxglove_ros1
 
 # --- [共通選單 Header] ---
 define SERVICE_MENU
-    echo "--- ROS 2 & AI ---"
-    echo "1) planning      - ROS 2 高階規劃"
-    echo "2) foxglove      - ROS 2 資料視覺化"
-    echo "3) vlm           - Isaac ROS 視覺加速"
-    echo "4) nanollm       - Nano LLM"
-    echo "5) alpamayo      - Alpamayo Python 3.12"
+    echo "--- ROS 1 ---"
+    echo "1) roscore       - ROS 1 Master"
+    echo "2) control       - ROS 1 底層控制"
+    echo "3) bridge        - ROS 1 <-> ROS 2 橋樑"
+    echo "4) foxglove_ros1 - ROS 1 資料視覺化"
 endef
 
 # 5. UP SCRIPT (多選)
 define SCRIPT_UP
     echo "=========================================="
-    echo " AGX Service Launcher ($(MODE) mode)"
+    echo " AGX Service Launcher (ROS 1 - $(MODE) mode)"
     echo "=========================================="
     $(SERVICE_MENU)
     echo "------------------------------------------"
     echo "a) Start ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-5/a/q, 可多選如 1 3]: " INPUT
+    read -p "Select service(s) [1-4/a/q, 可多選如 1 3]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Starting ALL services..."
@@ -172,7 +187,7 @@ define SCRIPT_UP
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="planning foxglove vlm nanollm alpamayo"
+    FOLDERS="roscore control bridge foxglove_ros1"
     TARGETS=""
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -189,13 +204,13 @@ export SCRIPT_UP
 # 6. DOWN SCRIPT (多選)
 define SCRIPT_DOWN
     echo "=========================================="
-    echo " AGX Service Stopper"
+    echo " AGX Service Stopper (ROS 1)"
     echo "=========================================="
     $(SERVICE_MENU)
     echo "------------------------------------------"
     echo "a) Stop ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-5/a/q, 可多選如 1 3]: " INPUT
+    read -p "Select service(s) [1-4/a/q, 可多選如 1 3]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Stopping ALL services..."
@@ -204,7 +219,7 @@ define SCRIPT_DOWN
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="planning foxglove vlm nanollm alpamayo"
+    FOLDERS="roscore control bridge foxglove_ros1"
     TARGETS=""
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -221,13 +236,13 @@ export SCRIPT_DOWN
 # 7. BUILD SCRIPT (多選)
 define SCRIPT_BUILD
     echo "=========================================="
-    echo " AGX Image Builder ($(MODE) mode)"
+    echo " AGX Image Builder (ROS 1 - $(MODE) mode)"
     echo "=========================================="
     $(SERVICE_MENU)
     echo "------------------------------------------"
     echo "a) Build ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-5/a/q, 可多選如 1 3]: " INPUT
+    read -p "Select service(s) [1-4/a/q, 可多選如 1 3]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Building ALL images..."
@@ -236,7 +251,7 @@ define SCRIPT_BUILD
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="planning foxglove vlm nanollm alpamayo"
+    FOLDERS="roscore control bridge foxglove_ros1"
     TARGETS=""
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -253,13 +268,13 @@ export SCRIPT_BUILD
 # 8. REBUILD SCRIPT (多選)
 define SCRIPT_REBUILD
     echo "=========================================="
-    echo " AGX Service Rebuilder ($(MODE) mode)"
+    echo " AGX Service Rebuilder (ROS 1 - $(MODE) mode)"
     echo "=========================================="
     $(SERVICE_MENU)
     echo "------------------------------------------"
     echo "a) Rebuild ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select service(s) [1-5/a/q, 可多選如 1 3]: " INPUT
+    read -p "Select service(s) [1-4/a/q, 可多選如 1 3]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
     if [ "$$INPUT" = "a" ]; then
         echo "[Info] Rebuilding ALL services..."
@@ -268,7 +283,7 @@ define SCRIPT_REBUILD
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="planning foxglove vlm nanollm alpamayo"
+    FOLDERS="roscore control bridge foxglove_ros1"
     TARGETS=""
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -287,7 +302,7 @@ export SCRIPT_REBUILD
 # ==============================================================================
 
 help: ## Show available commands
-	echo "AGX ROS Control Interface"
+	echo "AGX ROS 1 Control Interface"
 	echo "   Task Target: $(TASK_CONTAINER)"
 	echo "   Context:     $(CURRENT_CONTEXT)"
 	echo "   Mode:        $(MODE)"
@@ -307,12 +322,9 @@ help: ## Show available commands
 	echo ""
 	echo "--- 任務管理 ---"
 	echo "  make join               Enter container shell"
-	echo "  make plan               Launch planning task"
+	echo "  make run                Launch control task"
 	echo "  make stop               Terminate running tasks"
 	echo "  make view               Attach to task session"
-	echo ""
-	echo "--- Web Dashboard ---"
-	echo "  make dashboard          啟動 Web 控制面板 (port 8080)"
 
 check-env:
 	if [ ! -f $(ENV_FILE) ]; then echo "[Error] Config file '$(ENV_FILE)' not found."; exit 1; fi
@@ -342,72 +354,14 @@ logs: ## Follow all logs
 ps: ## View all container status
 	$(COMPOSE_CMD) ps
 
-dashboard: ## Launch Web Dashboard (port 8080)
-	docker compose --env-file $(ENV_FILE) -f dashboard/docker-compose.yaml -p $(PROJECT_NAME) up -d --build
-	@echo ""
-	@echo "  🚀 Dashboard: http://localhost:8080"
-	@echo ""
-
 clean: ## Remove all containers and images
 	$(COMPOSE_CMD) down --rmi local -v --remove-orphans
-
-# ==============================================================================
-#  Task Actions
-# ==============================================================================
-
-PLAN_EXEC := docker exec -it planning bash -ic
-
-# 9. PLANNING TASK SCRIPT
-define SCRIPT_PLAN
-    echo "=========================================="
-    echo " Planning Task Launcher"
-    echo " Target: planning"
-    echo "=========================================="
-    echo "1) Lidar 啟動測試     (urg_node2)"
-    echo "2) SLAM Bringup       (slam_bringup)"
-    echo "3) Keyboard Control   (teleop_twist_keyboard)"
-    echo "4) Save Map           (map_saver)"
-    echo "------------------------------------------"
-    echo "a) Launch ALL    q) Quit"
-    echo "------------------------------------------"
-    read -p "Select task(s) [1-4/a/q, 可多選如 1 2]: " INPUT
-    if [ "$$INPUT" = "q" ]; then exit 0; fi
-    if [ "$$INPUT" = "a" ]; then INPUT="1 2 3 4"; fi
-    CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    LAUNCHED=0
-    for choice in $$CHOICES; do
-        S_NAME=""; CMD_MAIN=""
-        case $$choice in
-            1) S_NAME="plan_lidar";    CMD_MAIN="ros2 launch urg_node2 urg_node2.launch.py";;
-            2) S_NAME="plan_slam";     CMD_MAIN="ros2 launch car_control slam_bringup.launch.py";;
-            3) S_NAME="plan_keyboard"; CMD_MAIN="ros2 run teleop_twist_keyboard teleop_twist_keyboard";;
-            4) S_NAME="plan_savemap";  CMD_MAIN="ros2 run nav2_map_server map_saver_cli -f /root/ros2_ws/src/car_control/config/my_map";;
-            *) echo "[Warn] Skipping invalid option: $$choice"; continue;;
-        esac
-        if TMUX= tmux has-session -t $$S_NAME 2>/dev/null; then
-            echo "[Skip] $$S_NAME already running."
-            continue
-        fi
-        echo "[Info] Launching $$S_NAME..."
-        TMUX= tmux new-session -d -s $$S_NAME
-        sleep 1
-        tmux set -g mouse on
-        tmux send-keys -t $$S_NAME:0 "$(PLAN_EXEC) '$$CMD_MAIN'" C-m
-        LAUNCHED=$$((LAUNCHED + 1))
-    done
-    echo "[Info] $$LAUNCHED task(s) launched."
-    echo "       Use 'make view' to monitor, 'make stop' to terminate."
-endef
-export SCRIPT_PLAN
 
 join: ## Enter container shell (Interactive)
 	bash -c "$$SCRIPT_JOIN"
 
 run: guard-$(TASK_CONTAINER) ## Launch ROS task in control (Background)
 	bash -c "$$SCRIPT_RUN"
-
-plan: guard-planning ## Launch ROS task in planning (Background)
-	bash -c "$$SCRIPT_PLAN"
 
 stop: ## Terminate running tasks
 	bash -c "$$SCRIPT_STOP"

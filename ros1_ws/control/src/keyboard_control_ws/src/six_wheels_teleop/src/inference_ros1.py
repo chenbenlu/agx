@@ -410,7 +410,7 @@ class RLInferenceNode:
 
         # print(f"beta: {beta:.2f}")
         # print(f"roll:{self.odom_roll:.2f}, pitch:{self.odom_pitch:.2f}, dist={dist_to_goal:.2f}, beta: {beta:.2f}, ")
-        print(state)
+        # print(state)
         lidar_stack = np.concatenate(list(self.lidar_history), axis=2)
         
         return {

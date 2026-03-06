@@ -8,6 +8,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     ros-noetic-foxglove-bridge \
+    ros-noetic-tf2-msgs \
+    ros-noetic-velodyne-msgs \
     net-tools \
     iputils-ping \
     && rm -rf /var/lib/apt/lists/*

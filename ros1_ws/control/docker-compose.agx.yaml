@@ -6,3 +6,4 @@ services:
       - ROS_HOSTNAME=127.0.0.1
     volumes:
       - /home/systemlabagx/disk/agx/ros1_ws/control/src/keyboard_control_ws/src/:/root/keyboard_control_ws/src/
+      - /home/systemlabagx/disk/Lun_RL_ws/src/RL_ppo/outdoor_RL_demo:/root/keyboard_control_ws/src/models

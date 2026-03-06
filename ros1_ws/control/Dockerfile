@@ -38,6 +38,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # =======================================================
+# 3.5 安裝 Python 套件
+# =======================================================
+RUN pip3 install --no-cache-dir onnxruntime squaternion
+
+# =======================================================
 # 4. 安裝 GTSAM
 # =======================================================
 RUN add-apt-repository -y ppa:borglab/gtsam-release-4.1 && \
@@ -62,22 +67,22 @@ WORKDIR ${WORKSPACE}
 # (A) HDL Workspace
 COPY ./src/hdl_ws/src ${WORKSPACE}/hdl_ws/src
 RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
-                  cd ${WORKSPACE}/hdl_ws && catkin_make -j$(nproc)"
+    cd ${WORKSPACE}/hdl_ws && catkin_make -j$(nproc)"
 
 # (B) LiDAR Workspace (isolated)
 COPY ./src/lidar_ws/src ${WORKSPACE}/lidar_ws/src
 RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
-                  cd ${WORKSPACE}/lidar_ws && catkin_make_isolated"
+    cd ${WORKSPACE}/lidar_ws && catkin_make_isolated"
 
 # (C) Realsense Workspace
 COPY ./src/realsense_ws/src ${WORKSPACE}/realsense_ws/src
 RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
-                  cd ${WORKSPACE}/realsense_ws && catkin_make"
+    cd ${WORKSPACE}/realsense_ws && catkin_make"
 
 # (D) Keyboard Control Workspace
 COPY ./src/keyboard_control_ws/src ${WORKSPACE}/keyboard_control_ws/src
 RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
-                  cd ${WORKSPACE}/keyboard_control_ws && catkin_make"
+    cd ${WORKSPACE}/keyboard_control_ws && catkin_make"
 
 # =======================================================
 # 7. 設定 Entrypoint

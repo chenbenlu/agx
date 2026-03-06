@@ -1,9 +1,9 @@
 services:
-# =========================================
-# 6. Nano LLM 服務 (含 ROS 2 Humble)
-# 參考: https://github.com/dusty-nv/jetson-containers/tree/master/packages/llm/nano_llm
-# 注意：container_name 改為 nanollm_compose 以避免與手動建立的 nanollm 容器衝突
-# =========================================
+  # =========================================
+  # 6. Nano LLM 服務 (含 ROS 2 Humble)
+  # 參考: https://github.com/dusty-nv/jetson-containers/tree/master/packages/llm/nano_llm
+  # 注意：container_name 改為 nanollm_compose 以避免與手動建立的 nanollm 容器衝突
+  # =========================================
   nanollm:
     build:
       context: ./
@@ -59,4 +59,4 @@ services:
     working_dir: /data
     stdin_open: true
     tty: true
-    command: ["bash", "-lc", "sleep infinity"]
+    command: [ "bash", "-lc", "sleep infinity" ]

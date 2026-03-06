@@ -21,7 +21,6 @@ services:
     privileged: true
     runtime: nvidia
     volumes:
-      - /dev:/dev
       - /run/jtop.stats.sock:/run/jtop.stats.sock
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro

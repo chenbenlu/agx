@@ -19,11 +19,12 @@ services:
       - DISPLAY=${DISPLAY}
       - XAUTHORITY=/tmp/.docker.xauth
     volumes:
-      - /dev:/dev
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
       - /home/systemlabagx/disk/Lun_RL_ws/src/six_wheels_teleop:/root/keyboard_control_ws/src/six_wheels_teleop
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
     tty: true
     stdin_open: true

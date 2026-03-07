@@ -7,8 +7,7 @@ FROM ${BASE_PC} AS final
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    ros-noetic-foxglove-bridge \
-    ros-noetic-tf2-msgs \
+    ros-noetic-rosbridge-suite \
     ros-noetic-velodyne-msgs \
     net-tools \
     iputils-ping \
@@ -16,6 +15,6 @@ RUN apt-get update && apt-get install -y \
 
 RUN echo "source /opt/ros/noetic/setup.bash" >> /root/.bashrc
 
-EXPOSE 8765
+EXPOSE 9090
 
-CMD ["bash", "-c", "source /opt/ros/noetic/setup.bash && roslaunch foxglove_bridge foxglove_bridge.launch port:=8765"]
+CMD ["bash", "-c", "source /opt/ros/noetic/setup.bash && roslaunch rosbridge_server rosbridge_websocket.launch port:=9090"]

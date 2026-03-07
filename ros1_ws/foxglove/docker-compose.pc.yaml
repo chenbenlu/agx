@@ -1,4 +1,4 @@
 services:
-  foxglove:
+  foxglove_ros1:
     ports:
-      - "8765:8765"
+      - "9090:9090"

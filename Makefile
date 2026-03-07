@@ -4,8 +4,6 @@
 
 # --- [Configuration] ---
 PROJECT_NAME   := agx_ros
-TASK_CONTAINER := control
-SERVICE_NAME   ?= control
 
 # Docker Buildkit
 export DOCKER_BUILDKIT=1
@@ -33,65 +31,18 @@ COMPOSE_CMD := docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) -p $(PRO
 # 子目錄 (指定 service via s=xxx)
 COMPOSE_SUB = docker compose --env-file $(CURDIR)/$(ENV_FILE) -f $(s)/docker-compose.yaml -p $(PROJECT_NAME)
 
-TASK_EXEC   := docker exec -it $(TASK_CONTAINER) bash -ic
+
 
 # --- [Make Settings] ---
 .DEFAULT_GOAL := help
 .SILENT:
-.PHONY: help build up rebuild down join logs ps clean run plan stop view dashboard guard-%
+.PHONY: help build up rebuild down join logs ps clean plan stop view dashboard guard-%
 
 # ==============================================================================
 #  Logic Definitions (Shell Scripts inside Makefile)
 # ==============================================================================
 
-# 1. RUN SCRIPT
-define SCRIPT_RUN
-    echo "=========================================="
-    echo " AGX Task Launcher"
-    echo " Target: $(TASK_CONTAINER)"
-    echo "=========================================="
-    echo "1) Keyboard Control (agx_keyboard)"
-    echo "2) Lidar Mapping    (agx_lidar)"
-    echo "3) HDL Localization (agx_loc)"
-    echo "4) Realsense Camera (agx_camera)"
-    echo "------------------------------------------"
-    echo "a) Launch ALL    q) Quit"
-    echo "------------------------------------------"
-    read -p "Select task(s) [1-4/a/q, 可多選如 1 3]: " INPUT
-    if [ "$$INPUT" = "q" ]; then exit 0; fi
-    if [ "$$INPUT" = "a" ]; then INPUT="1 2 3 4"; fi
-    CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    LAUNCHED=0
-    for choice in $$CHOICES; do
-        S_NAME=""; CMD_MAIN=""; CMD_SUB=""; TYPE="single"
-        case $$choice in
-            1) S_NAME="agx_keyboard"; CMD_MAIN="rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0"; CMD_SUB="rosrun six_wheels_teleop imu_teletop_0908"; TYPE="split";;
-            2) S_NAME="agx_lidar";    CMD_MAIN="roslaunch velodyne_pointcloud VLP16_points.launch";;
-            3) S_NAME="agx_loc";      CMD_MAIN="roslaunch hdl_localization hdl_localization.launch";;
-            4) S_NAME="agx_camera";   CMD_MAIN="roslaunch realsense2_camera rs_camera.launch"; CMD_SUB="rosrun imu_filter_madgwick imu_filter_node _use_mag:=false _remove_gravity_vector:=true _output_rate:=100.0 /imu/data_raw:=/camera/imu"; TYPE="split";;
-            *) echo "[Warn] Skipping invalid option: $$choice"; continue;;
-        esac
-        if TMUX= tmux has-session -t $$S_NAME 2>/dev/null; then
-            echo "[Skip] $$S_NAME already running."
-            continue
-        fi
-        echo "[Info] Launching $$S_NAME..."
-        TMUX= tmux new-session -d -s $$S_NAME
-        sleep 1
-        tmux set -g mouse on
-        tmux send-keys -t $$S_NAME:0 "$(TASK_EXEC) '$$CMD_MAIN'" C-m
-        if [ "$$TYPE" = "split" ]; then
-            tmux split-window -h -t $$S_NAME:0
-            sleep 0.5
-            tmux send-keys -t $$S_NAME:0.1 "sleep 2" C-m
-            tmux send-keys -t $$S_NAME:0.1 "$(TASK_EXEC) '$$CMD_SUB'" C-m
-        fi
-        LAUNCHED=$$((LAUNCHED + 1))
-    done
-    echo "[Info] $$LAUNCHED task(s) launched."
-    echo "       Use 'make view' to monitor, 'make stop' to terminate."
-endef
-export SCRIPT_RUN
+
 
 # 2. JOIN SCRIPT
 define SCRIPT_JOIN
@@ -177,6 +128,7 @@ define SCRIPT_UP
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
         if [ -z "$$T" ]; then echo "[Warn] Skipping invalid: $$c"; continue; fi
+        if [ "$$T" = "foxglove" ]; then T="visualization"; fi
         TARGETS="$$TARGETS $$T"
     done
     if [ -n "$$TARGETS" ]; then
@@ -209,6 +161,7 @@ define SCRIPT_DOWN
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
         if [ -z "$$T" ]; then echo "[Warn] Skipping invalid: $$c"; continue; fi
+        if [ "$$T" = "foxglove" ]; then T="visualization"; fi
         TARGETS="$$TARGETS $$T"
     done
     if [ -n "$$TARGETS" ]; then
@@ -241,6 +194,7 @@ define SCRIPT_BUILD
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
         if [ -z "$$T" ]; then echo "[Warn] Skipping invalid: $$c"; continue; fi
+        if [ "$$T" = "foxglove" ]; then T="visualization"; fi
         TARGETS="$$TARGETS $$T"
     done
     if [ -n "$$TARGETS" ]; then
@@ -273,6 +227,7 @@ define SCRIPT_REBUILD
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
         if [ -z "$$T" ]; then echo "[Warn] Skipping invalid: $$c"; continue; fi
+        if [ "$$T" = "foxglove" ]; then T="visualization"; fi
         TARGETS="$$TARGETS $$T"
     done
     if [ -n "$$TARGETS" ]; then
@@ -403,8 +358,7 @@ export SCRIPT_PLAN
 join: ## Enter container shell (Interactive)
 	bash -c "$$SCRIPT_JOIN"
 
-run: guard-$(TASK_CONTAINER) ## Launch ROS task in control (Background)
-	bash -c "$$SCRIPT_RUN"
+
 
 plan: guard-planning ## Launch ROS task in planning (Background)
 	bash -c "$$SCRIPT_PLAN"

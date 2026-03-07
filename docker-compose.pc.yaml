@@ -5,11 +5,7 @@
 # ==============================================================================
 
 include:
-  - path:
-      - ./ros1_ws/docker-compose.yaml
-      - ./ros1_ws/docker-compose.pc.yaml
-
-  - path: ./planning/docker-compose.yaml
-  - path:
-      - ./foxglove/docker-compose.yaml
-      - ./foxglove/docker-compose.pc.yaml
+    - path: ./planning/docker-compose.yaml
+    - path:
+          - ./foxglove/docker-compose.yaml
+          - ./foxglove/docker-compose.pc.yaml

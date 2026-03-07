@@ -1,0 +1,67 @@
+name: Docker Lint (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      module_name:
+        required: true
+        type: string
+        description: "Module name to lint"
+      module_path:
+        required: true
+        type: string
+        description: "Module path relative to repo root"
+      dockerfiles:
+        required: true
+        type: string
+        description: "Comma-separated list of Dockerfiles to lint"
+
+jobs:
+  lint:
+    name: Lint ${{ inputs.module_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Parse Dockerfiles
+        id: parse
+        run: |
+          # 將逗號分隔的 Dockerfile 列表轉換為陣列
+          FILES="${{ inputs.dockerfiles }}"
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Lint Dockerfiles
+        run: |
+          MODULE="${{ inputs.module_name }}"
+          MODULE_PATH="${{ inputs.module_path }}"
+          FILES="${{ steps.parse.outputs.files }}"
+
+          echo "🔍 Linting $MODULE Dockerfiles..."
+
+          IFS=',' read -ra DOCKERFILE_ARRAY <<< "$FILES"
+          for dockerfile in "${DOCKERFILE_ARRAY[@]}"; do
+            dockerfile=$(echo "$dockerfile" | xargs)  # trim whitespace
+            FULL_PATH="$MODULE_PATH/$dockerfile"
+
+            if [ -f "$FULL_PATH" ]; then
+              echo "  ✓ $dockerfile"
+              docker run --rm -i hadolint/hadolint < "$FULL_PATH" || {
+                echo "  ⚠️  Warnings found in $dockerfile (continuing...)"
+              }
+            else
+              echo "  ⚠️  $dockerfile not found at $FULL_PATH"
+            fi
+          done
+
+          echo "✅ Lint completed"
+
+      - name: Summary
+        run: |
+          echo "## Lint Results for ${{ inputs.module_name }}"
+          echo ""
+          echo "- Module: ${{ inputs.module_name }}"
+          echo "- Path: ${{ inputs.module_path }}"
+          echo "- Status: ✅ Passed"

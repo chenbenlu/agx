@@ -1,0 +1,214 @@
+name: Docker Image CI (Modular v2 - App Layer Only)
+
+on:
+  push:
+    branches: [ "main" ]
+    # 仅在应用层改动时触发
+    paths-ignore:
+      - 'ros1_ws/**'
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - 'ros1_ws/**'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ============================================================================
+  # 步驟 1: 偵測改動的模組
+  # ============================================================================
+  detect-changes:
+    name: Detect Changed Modules
+    runs-on: ubuntu-latest
+    outputs:
+      modules-json: ${{ steps.detect.outputs.modules_json }}
+      modules-csv: ${{ steps.detect.outputs.modules_csv }}
+      has-changes: ${{ steps.detect.outputs.has_changes }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Detect changed modules
+        id: detect
+        run: |
+          python .github/scripts/detect_changes.py \
+            --base origin/main \
+            --head HEAD \
+            --root . \
+            --output-json > /tmp/changes.json
+
+          # 解析 JSON 輸出
+          MODULES=$(python -c "import json; f=open('/tmp/changes.json'); print(','.join(json.load(f).get('ordered_modules', [])))")
+          MODULES_JSON=$(cat /tmp/changes.json | python -c "import sys, json; print(json.dumps(json.load(sys.stdin)['ordered_modules']))")
+          HAS_CHANGES=$([[ -z "$MODULES" ]] && echo "false" || echo "true")
+
+          echo "modules_csv=$MODULES" >> $GITHUB_OUTPUT
+          echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT
+          echo "has_changes=$HAS_CHANGES" >> $GITHUB_OUTPUT
+
+          echo "📊 Detected changed modules: $MODULES"
+
+  # ============================================================================
+  # 步驟 2: 初始化 CI 環境
+  # ============================================================================
+  setup:
+    name: Setup CI Environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Set up QEMU for multi-platform support
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-options: |
+            image=moby/buildkit:latest
+            network=host
+
+  # ============================================================================
+  # TIER 1: 核心基礎模組 (使用 Reusable Workflows)
+  # ============================================================================
+  # 注意: ROS1 基礎模組現在由獨立的 ros1_ws-ci.yml 管理
+  # 這裡只保留應用層模組
+
+  # ============================================================================
+  # TIER 3: 應用服務 (並行構建，alpamayo 跳過)
+  # ============================================================================
+  build-vlm:
+    name: Build vlm
+    needs: [setup, detect-changes]
+    if: contains(needs.detect-changes.outputs.modules-csv, 'vlm')
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      module_name: "vlm"
+      module_path: "vlm"
+      dockerfile: "Dockerfile"
+      platforms: "linux/amd64"
+
+  build-planning:
+    name: Build planning
+    needs: [setup, detect-changes]
+    if: contains(needs.detect-changes.outputs.modules-csv, 'planning')
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      module_name: "planning"
+      module_path: "planning"
+      dockerfile: "Dockerfile"
+      platforms: "linux/amd64"
+
+  build-foxglove:
+    name: Build foxglove
+    needs: [setup, detect-changes]
+    if: contains(needs.detect-changes.outputs.modules-csv, 'foxglove')
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      module_name: "foxglove"
+      module_path: "foxglove"
+      dockerfile: "Dockerfile"
+      platforms: "linux/amd64"
+
+  build-nanollm:
+    name: Build nanollm
+    needs: [setup, detect-changes]
+    if: contains(needs.detect-changes.outputs.modules-csv, 'nanollm')
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      module_name: "nanollm"
+      module_path: "nanollm"
+      dockerfile: "Dockerfile"
+      platforms: "linux/amd64"
+
+  # alpamayo: 跳過 (仍在測試中)
+  skip-alpamayo:
+    name: Skip alpamayo (Testing in progress)
+    needs: [detect-changes]
+    if: contains(needs.detect-changes.outputs.modules-csv, 'alpamayo')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log skip
+        run: |
+          echo "⏭️  Skipping alpamayo (still in testing phase)"
+          echo "💡 Tip: Once testing is complete, remove 'skip_verification' from modules.yaml"
+
+  # ============================================================================
+  # TIER 4: 管理工具
+  # ============================================================================
+  build-dashboard:
+    name: Build dashboard
+    needs: [setup, detect-changes]
+    if: contains(needs.detect-changes.outputs.modules-csv, 'dashboard')
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      module_name: "dashboard"
+      module_path: "dashboard"
+      dockerfile: "Dockerfile"
+      platforms: "linux/amd64"
+
+  # ============================================================================
+  # 最終驗證: 所有構建完成
+  # ============================================================================
+  verify:
+    name: Verify App Layer Builds ✅
+    needs:
+      - detect-changes
+      - setup
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate build summary
+        run: |
+          echo "## 🎉 App Layer CI Pipeline Complete"
+          echo ""
+          echo "### Build Summary"
+          echo "- **Detection Status**: ${{ needs.detect-changes.result }}"
+          echo "- **Setup Status**: ${{ needs.setup.result }}"
+          echo ""
+          echo "### Detected Modules"
+          echo "\`\`\`"
+          echo "${{ needs.detect-changes.outputs.modules-csv }}"
+          echo "\`\`\`"
+          echo ""
+          echo "### Note"
+          echo "ROS1 workspace is built separately in: \`ros1_ws-ci.yml\`"
+
+      - name: Check for failures
+        run: |
+          if [ "${{ needs.setup.result }}" = "failure" ] || [ "${{ needs.detect-changes.result }}" = "failure" ]; then
+            echo "❌ Setup or detection failed!"
+            exit 1
+          fi
+
+      - name: Success
+        if: success()
+        run: |
+          echo "✅ App layer builds completed successfully!"

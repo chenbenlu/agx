@@ -1,0 +1,106 @@
+# ==============================================================================
+#  AGX 應用層模組配置
+#  定義應用層各模組的優先級和依賴關係
+#
+#  注意: ROS 工作空間已隔離到 ros1_ws/modules.yaml
+#        由獨立的 ros1_ws-ci.yml 管理
+# ==============================================================================
+
+modules:
+  # === TIER 3: 應用服務 ===
+  vlm:
+    path: vlm
+    priority: 3
+    description: "Vision Language Model (Isaac ROS)"
+    dockerfiles:
+      - Dockerfile
+    critical: true
+    depends_on: []
+
+  planning:
+    path: planning
+    priority: 3
+    description: "ROS 2 Planning Module"
+    dockerfiles:
+      - Dockerfile
+    critical: true
+    depends_on: []
+
+  foxglove:
+    path: foxglove
+    priority: 3
+    description: "Foxglove Data Visualization"
+    dockerfiles:
+      - Dockerfile
+    critical: false
+    depends_on: []
+
+  nanollm:
+    path: nanollm
+    priority: 3
+    description: "Nano LLM Module"
+    dockerfiles:
+      - Dockerfile
+    critical: false
+    depends_on: []
+
+  alpamayo:
+    path: alpamayo
+    priority: 3
+    description: "Alpamayo Python 3.12"
+    dockerfiles:
+      - Dockerfile
+    critical: false
+    depends_on: []
+    skip_verification: true  # 還在測試中，跳過 CI 驗證
+
+  dashboard:
+    path: dashboard
+    priority: 4
+    description: "Web Control Dashboard"
+    dockerfiles:
+      - Dockerfile
+    critical: false
+    depends_on: []
+
+# ==============================================================================
+#  CI 策略配置 (應用層)
+# ==============================================================================
+ci_strategy:
+  # 平行構建的最大數量
+  max_parallel_jobs: 3
+
+  # 跳過檢查的模式
+  skipPatterns:
+    - "ros1_ws"          # ROS 工作空間已隔離
+    - ".git"
+    - ".gitignore"
+
+  # 構建超時設定 (分鐘)
+  build_timeout: 30
+
+  # 是否啟用變更檢測 (只構建改動的模組)
+  enable_change_detection: true
+
+  # 失敗是否中斷 CI
+  fail_fast: false
+
+# ==============================================================================
+#  標籤配置 (用於 docker build --label)
+# ==============================================================================
+labels:
+  project: "agx"
+  team: "nycusystemlab"
+  repository: "agx"
+  layer: "application"
+
+# ==============================================================================
+#  與 ROS 工作空間的集成
+# ==============================================================================
+# 應用層可以通過以下方式引用 ROS 構建的鏡像:
+#
+#   FROM agx-ros1_ws-base:latest
+#   FROM agx-ros1_ws-control:latest
+#
+# ROS 工作空間的鏡像在 ros1_ws-ci.yml 中構建並發佈
+# 詳見: ros1_ws/modules.yaml

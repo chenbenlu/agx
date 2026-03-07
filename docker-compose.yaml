@@ -4,12 +4,12 @@
 # ==============================================================================
 
 include:
-    - path:
-          - ./planning/docker-compose.yaml
-          - ./planning/docker-compose.agx.yaml
-    - path:
-          - ./foxglove/docker-compose.yaml
-          - ./foxglove/docker-compose.agx.yaml
-    - path: ./vlm/docker-compose.yaml
-    - path: ./nanollm/docker-compose.yaml
-    - path: ./alpamayo/docker-compose.yaml
+  - path:
+      - ./planning/docker-compose.yaml
+      - ./planning/docker-compose.agx.yaml
+  - path:
+      - ./foxglove/docker-compose.yaml
+      - ./foxglove/docker-compose.agx.yaml
+  - path: ./vlm/docker-compose.yaml
+  - path: ./nanollm/docker-compose.yaml
+  - path: ./cosmos/docker-compose.yaml

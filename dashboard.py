@@ -28,7 +28,7 @@ SERVICES = {
     "foxglove":       {"name": "ROS 2 資料視覺化",   "container": "foxglove",      "icon": "📊", "service": "visualization"},
     "vlm":            {"name": "Isaac ROS 視覺加速", "container": "vlm",           "icon": "👁️", "service": "vlm"},
     "nanollm":        {"name": "Nano LLM",           "container": "nanollm",       "icon": "🤖", "service": "nanollm"},
-    "alpamayo":       {"name": "Alpamayo",           "container": "alpamayo",      "icon": "🦙", "service": "alpamayo"},
+    "cosmos":         {"name": "Cosmos-Reason2",     "container": "cosmos",        "icon": "🌌", "service": "cosmos"},
 }
 
 TASKS = {

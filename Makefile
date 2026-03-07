@@ -93,7 +93,7 @@ endef
 export SCRIPT_VIEW
 
 # --- [Service List] ---
-SERVICES := planning foxglove vlm nanollm alpamayo
+SERVICES := planning foxglove vlm nanollm cosmos
 
 # --- [共通選單 Header] ---
 define SERVICE_MENU
@@ -102,7 +102,7 @@ define SERVICE_MENU
     echo "2) foxglove      - ROS 2 資料視覺化"
     echo "3) vlm           - Isaac ROS 視覺加速"
     echo "4) nanollm       - Nano LLM"
-    echo "5) alpamayo      - Alpamayo Python 3.12"
+    echo "5) cosmos        - Cosmos-Reason2"
 endef
 
 # 5. UP SCRIPT (多選)
@@ -123,7 +123,7 @@ define SCRIPT_UP
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="planning foxglove vlm nanollm alpamayo"
+    FOLDERS="planning foxglove vlm nanollm cosmos"
     TARGETS=""
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -156,7 +156,7 @@ define SCRIPT_DOWN
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="planning foxglove vlm nanollm alpamayo"
+    FOLDERS="planning foxglove vlm nanollm cosmos"
     TARGETS=""
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -189,7 +189,7 @@ define SCRIPT_BUILD
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="planning foxglove vlm nanollm alpamayo"
+    FOLDERS="planning foxglove vlm nanollm cosmos"
     TARGETS=""
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")
@@ -222,7 +222,7 @@ define SCRIPT_REBUILD
         exit 0
     fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
-    FOLDERS="planning foxglove vlm nanollm alpamayo"
+    FOLDERS="planning foxglove vlm nanollm cosmos"
     TARGETS=""
     for c in $$CHOICES; do
         T=$$(echo "$$FOLDERS" | tr ' ' '\n' | sed -n "$${c}p")

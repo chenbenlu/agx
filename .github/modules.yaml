@@ -44,15 +44,14 @@ modules:
     critical: false
     depends_on: []
 
-  alpamayo:
-    path: alpamayo
+  cosmos:
+    path: cosmos
     priority: 3
-    description: "Alpamayo Python 3.12"
+    description: "Cosmos Module"
     dockerfiles:
       - Dockerfile
     critical: false
     depends_on: []
-    skip_verification: true  # 還在測試中，跳過 CI 驗證
 
   dashboard:
     path: dashboard

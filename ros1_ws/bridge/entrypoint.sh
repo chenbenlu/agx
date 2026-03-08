@@ -21,9 +21,9 @@ export ROS_MASTER_URI="$SAVED_ROS_MASTER_URI"
 export ROS_HOSTNAME="$SAVED_ROS_HOSTNAME"
 
 echo "[bridge] Waiting for roscore at $ROS_MASTER_URI ..."
-until rostopic list > /dev/null 2>&1; do
-    sleep 2
-done
+# 由於 Foxy 和 Noetic 混用 PYTHONPATH 會導致 rostopic list 報錯，改用簡單延遲或交給 ros1_bridge 自行檢查
+sleep 3
+
 echo "[bridge] roscore is up! Starting ros1_bridge ..."
 
 exec ros2 run ros1_bridge dynamic_bridge --bridge-all-1to2-topics --bridge-all-2to1-topics

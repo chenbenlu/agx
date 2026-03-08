@@ -145,17 +145,16 @@ jobs:
       dockerfile: "Dockerfile"
       platforms: "linux/amd64"
 
-  # alpamayo: 跳過 (仍在測試中)
-  skip-alpamayo:
-    name: Skip alpamayo (Testing in progress)
-    needs: [detect-changes]
-    if: contains(needs.detect-changes.outputs.modules-csv, 'alpamayo')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Log skip
-        run: |
-          echo "⏭️  Skipping alpamayo (still in testing phase)"
-          echo "💡 Tip: Once testing is complete, remove 'skip_verification' from modules.yaml"
+  build-cosmos:
+    name: Build cosmos
+    needs: [setup, detect-changes]
+    if: contains(needs.detect-changes.outputs.modules-csv, 'cosmos')
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      module_name: "cosmos"
+      module_path: "cosmos"
+      dockerfile: "Dockerfile"
+      platforms: "linux/amd64"
 
   # ============================================================================
   # TIER 4: 管理工具

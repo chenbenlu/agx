@@ -4,10 +4,9 @@
 
 ## ⚠️ 重要注意事項
 
-### alpamayo 模組 - 測試中
-- ❌ **目前不進行 CI 驗證**（仍在測試階段）
-- ⏭️ PR 時會自動跳過此模組
-- 📝 本地可手動測試構建
+### 應用層模組
+- ✅ **支援的模組**: vlm, planning, foxglove, nanollm, cosmos, dashboard
+- 各模組在 `.github/modules.yaml` 中定義
 
 ### ARM 架構支援
 - ✅ **已啟用 QEMU** 用於 ARM64 模擬
@@ -202,16 +201,6 @@ docker build ros1_ws/base -f ros1_ws/base/Dockerfile -t agx:ros1_ws_base
 python .github/scripts/detect_changes.py --base origin/main --head HEAD --output-json
 ```
 
-### 測試 alpamayo（測試中的模組）
-
-```bash
-# 本地手動測試 alpamayo（在 CI 中會跳過）
-docker build alpamayo -f alpamayo/Dockerfile -t agx:alpamayo
-
-# 驗證構建成功
-docker images | grep alpamayo
-```
-
 ### ARM 架構測試
 
 ```bash
@@ -296,22 +285,6 @@ docker buildx ls
 # 重新嘗試 ARM64 構建
 docker buildx build --platform linux/arm64 \
   ros1_ws/base -f ros1_ws/base/Dockerfile
-```
-
-### alpamayo 模組測試
-
-**症狀**: alpamayo 在 CI 中被跳過
-
-**正常行為**: ✅ 這是預期的（模組仍在測試中）
-
-**本地測試**:
-```bash
-# 手動構建 alpamayo
-docker build alpamayo -f alpamayo/Dockerfile -t agx:alpamayo
-
-# 構建完成後編輯 modules.yaml
-# 將 skip_verification: true 改為 false 或移除
-# 然後重新推送 PR
 ```
 
 ---

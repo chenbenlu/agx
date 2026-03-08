@@ -1,2 +1,0 @@
-include:
-  - path: ./foxglove/docker-compose.pc.yaml

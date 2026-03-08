@@ -15,20 +15,20 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 CURRENT_CONTEXT := $(shell docker context show)
 MODE := pc
 ENV_FILE := ../.env
-COMPOSE_FILE := docker-compose.pc.yaml
+COMPOSE_FILE :=
 
 ifneq (,$(findstring agx,$(CURRENT_CONTEXT)))
     MODE := agx
     ENV_FILE := ../.env.agx
-    COMPOSE_FILE := docker-compose.agx.yaml
+    COMPOSE_FILE := -f docker-compose.agx.yaml
 else ifeq ($(shell uname -m), aarch64)
     MODE := agx
     ENV_FILE := ../.env.agx
-    COMPOSE_FILE := docker-compose.agx.yaml
+    COMPOSE_FILE := -f docker-compose.agx.yaml
 endif
 
 # --- [Compose Commands] ---
-COMPOSE_CMD := docker compose --env-file $(ENV_FILE) -f docker-compose.yaml -f $(COMPOSE_FILE) -p $(PROJECT_NAME)
+COMPOSE_CMD := docker compose --env-file $(ENV_FILE) -f docker-compose.yaml $(COMPOSE_FILE) -p $(PROJECT_NAME)
 
 TASK_EXEC   := docker exec -it $(TASK_CONTAINER) bash -ic
 

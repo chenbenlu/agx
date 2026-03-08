@@ -1,4 +1,0 @@
-services:
-  foxglove_ros1:
-    ports:
-      - "9090:9090"

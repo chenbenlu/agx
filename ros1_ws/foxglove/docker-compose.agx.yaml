@@ -1,5 +1,5 @@
 services:
-  foxglove:
+  foxglove_ros1:
     network_mode: host
     environment:
       - ROS_MASTER_URI=http://127.0.0.1:11311

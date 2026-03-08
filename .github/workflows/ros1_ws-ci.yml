@@ -76,11 +76,23 @@ jobs:
           fi
 
           # 清理重複
-          MODULES=$(echo $MODULES | tr ' ' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
+          MODULES=$(echo "$MODULES" | tr ' ' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
+
+          # 處理空模組的情況
+          if [ -z "$MODULES" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "modules_csv=" >> $GITHUB_OUTPUT
+            echo "modules_json=[]" >> $GITHUB_OUTPUT
+            echo "⏭️  No ROS modules changed (only non-module files)"
+            exit 0
+          fi
 
           echo "has_changes=true" >> $GITHUB_OUTPUT
           echo "modules_csv=$MODULES" >> $GITHUB_OUTPUT
-          echo "modules_json=$(echo $MODULES | python -c "import sys; print('[\"' + '\", \"'.join(sys.stdin.read().strip().split(',')) + '\"]')")" >> $GITHUB_OUTPUT
+
+          # 轉換為 JSON 陣列（正確處理空值）
+          MODULES_JSON=$(echo "$MODULES" | python -c 'import sys; modules=[m.strip() for m in sys.stdin.read().strip().split(",") if m.strip()]; print("[" + ", ".join([f"\"{m}\"" for m in modules]) + "]")')
+          echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT
 
           echo "📊 Detected ROS modules to build: $MODULES"
 
@@ -223,6 +235,8 @@ jobs:
     needs:
       - detect-ros-changes
       - build-ros-base
+      - build-ros-bridge
+      - build-ros-control
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -236,6 +250,8 @@ jobs:
           echo ""
           echo "### Build Results"
           echo "- **Base Build**: ${{ needs.build-ros-base.result }}"
+          echo "- **Bridge Build**: ${{ needs.build-ros-bridge.result }}"
+          echo "- **Control Build**: ${{ needs.build-ros-control.result }}"
           echo ""
           echo "### Next Step"
           echo "ROS workspace images are ready for application layer to consume"
@@ -260,13 +276,27 @@ jobs:
     needs:
       - detect-ros-changes
       - build-ros-base
+      - build-ros-bridge
+      - build-ros-control
     if: always() && needs.detect-ros-changes.outputs.has-ros-changes == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check critical failures
-        if: needs.build-ros-base.result == 'failure'
+        if: |
+          needs.build-ros-base.result == 'failure' ||
+          needs.build-ros-bridge.result == 'failure' ||
+          needs.build-ros-control.result == 'failure'
         run: |
-          echo "❌ ROS base build failed!"
+          echo "❌ ROS builds failed!"
+          if [ "${{ needs.build-ros-base.result }}" = "failure" ]; then
+            echo "  - Base build failed"
+          fi
+          if [ "${{ needs.build-ros-bridge.result }}" = "failure" ]; then
+            echo "  - Bridge build failed"
+          fi
+          if [ "${{ needs.build-ros-control.result }}" = "failure" ]; then
+            echo "  - Control build failed"
+          fi
           exit 1
 
       - name: Success message

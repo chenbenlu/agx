@@ -51,7 +51,7 @@ jobs:
           # 解析 JSON 輸出
           MODULES=$(python -c "import json; f=open('/tmp/changes.json'); print(','.join(json.load(f).get('ordered_modules', [])))")
           MODULES_JSON=$(cat /tmp/changes.json | python -c "import sys, json; print(json.dumps(json.load(sys.stdin)['ordered_modules']))")
-          HAS_CHANGES=$([[ -z "$MODULES" ]] && echo "false" || echo "true")
+          HAS_CHANGES=$([ -z "$MODULES" ] && echo "false" || echo "true")
 
           echo "modules_csv=$MODULES" >> $GITHUB_OUTPUT
           echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT

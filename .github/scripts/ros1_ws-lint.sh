@@ -17,7 +17,6 @@ if [ -z "$MODULE" ]; then
     echo ""
     echo "Available ROS modules:"
     echo "  - base        (ROS L4T base image)"
-    echo "  - bridge      (ROS 1 <-> ROS 2 bridge)"
     echo "  - control     (SLAM & Localization)"
     exit 1
 fi
@@ -27,10 +26,6 @@ case "$MODULE" in
     base)
         MODULE_PATH="ros1_ws/base"
         DOCKERFILES=("Dockerfile" "Dockerfile.l4t")
-        ;;
-    bridge)
-        MODULE_PATH="ros1_ws/bridge"
-        DOCKERFILES=("Dockerfile")
         ;;
     control)
         MODULE_PATH="ros1_ws/control"

@@ -12,7 +12,6 @@ The project utilizes a **dual-track architecture** with containerized isolation:
 | Container | Role & Description |
 | --- | --- |
 | **`control`** | **[ROS 1 Noetic]** Handles low-level hardware drivers (Velodyne LiDAR, RealSense) and 3D SLAM algorithms. |
-| **`bridge`** | **[ROS 1 Bridge]** A dedicated bridge using `ros1_bridge` to enable seamless topic communication between Noetic and Humble. |
 | **`planning`** | **[ROS 2 Humble]** Responsible for high-level path planning (Nav2, Costmap) and behavior trees. |
 | **`foxglove`** | **[Visualization]** Runs a high-performance WebSocket server for remote visualization (replaces the heavy RViz client). |
 | **`isaac_ros`** | **[Perception]** Leverages NVIDIA Isaac ROS for GPU-accelerated VSLAM and AI perception tasks. |
@@ -155,7 +154,7 @@ python3 dashboard.py --port 8080
 
   - [x] **Phase 4**: Replace RViz with Foxglove Studio for Web-based Viz
 
-  - [ ] **Phase 5**: Deploy Nav2 Stack and bridge with SLAM maps
+  - [ ] **Phase 5**: Deploy Nav2 Stack for high-level path planning
 
   - [ ] **Phase 6**: Integrate VLM/RL models into ROS 2 nodes for AI Navigation
 

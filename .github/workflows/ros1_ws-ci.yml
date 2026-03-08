@@ -63,16 +63,13 @@ jobs:
           if echo "$CHANGED_FILES" | grep -q "ros1_ws/base/"; then
             MODULES="$MODULES base"
           fi
-          if echo "$CHANGED_FILES" | grep -q "ros1_ws/bridge/"; then
-            MODULES="$MODULES bridge"
-          fi
           if echo "$CHANGED_FILES" | grep -q "ros1_ws/control/"; then
             MODULES="$MODULES control"
           fi
 
-          # 如果 base 改動，則強制 bridge 和 control 也構建
+          # 如果 base 改動，則強制 control 也構建
           if echo "$MODULES" | grep -q "base"; then
-            MODULES="base bridge control"
+            MODULES="base control"
           fi
 
           # 清理重複
@@ -174,32 +171,8 @@ jobs:
           docker system prune -a -f
 
   # ============================================================================
-  # TIER 2: ROS 服務 (Bridge 和 Control)
+  # TIER 2: ROS 服務 (Control)
   # ============================================================================
-  build-ros-bridge:
-    name: Build ROS Bridge
-    needs: [detect-ros-changes, build-ros-base]
-    if: contains(needs.detect-ros-changes.outputs.ros-modules-csv, 'bridge') || contains(needs.detect-ros-changes.outputs.ros-modules-csv, 'base')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Lint ROS Bridge
-        run: |
-          echo "🔍 Linting ROS bridge..."
-          docker run --rm -i hadolint/hadolint < "ros1_ws/bridge/Dockerfile" || echo "  ⚠️  Warnings found"
-
-      - name: Build ROS Bridge
-        run: |
-          echo "🔨 Building ROS bridge..."
-          docker build ros1_ws/bridge -f ros1_ws/bridge/Dockerfile \
-            --tag agx-ros1_ws-bridge:latest \
-            --label module=ros1_ws_bridge
-          docker system prune -a -f
-
   build-ros-control:
     name: Build ROS Control
     needs: [detect-ros-changes, build-ros-base]
@@ -236,7 +209,6 @@ jobs:
     needs:
       - detect-ros-changes
       - build-ros-base
-      - build-ros-bridge
       - build-ros-control
     if: always()
     runs-on: ubuntu-latest
@@ -251,7 +223,6 @@ jobs:
           echo ""
           echo "### Build Results"
           echo "- **Base Build**: ${{ needs.build-ros-base.result }}"
-          echo "- **Bridge Build**: ${{ needs.build-ros-bridge.result }}"
           echo "- **Control Build**: ${{ needs.build-ros-control.result }}"
           echo ""
           echo "### Next Step"
@@ -266,7 +237,6 @@ jobs:
           echo "| Module | Image | Tag |"
           echo "|--------|-------|-----|"
           echo "| Base | agx-ros1_ws-base | latest, noetic |"
-          echo "| Bridge | agx-ros1_ws-bridge | latest |"
           echo "| Control | agx-ros1_ws-control | latest, slam |"
 
   # ============================================================================
@@ -277,7 +247,6 @@ jobs:
     needs:
       - detect-ros-changes
       - build-ros-base
-      - build-ros-bridge
       - build-ros-control
     if: always() && needs.detect-ros-changes.outputs.has-ros-changes == 'true'
     runs-on: ubuntu-latest
@@ -285,15 +254,11 @@ jobs:
       - name: Check critical failures
         if: |
           needs.build-ros-base.result == 'failure' ||
-          needs.build-ros-bridge.result == 'failure' ||
           needs.build-ros-control.result == 'failure'
         run: |
           echo "❌ ROS builds failed!"
           if [ "${{ needs.build-ros-base.result }}" = "failure" ]; then
             echo "  - Base build failed"
-          fi
-          if [ "${{ needs.build-ros-bridge.result }}" = "failure" ]; then
-            echo "  - Bridge build failed"
           fi
           if [ "${{ needs.build-ros-control.result }}" = "failure" ]; then
             echo "  - Control build failed"

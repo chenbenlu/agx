@@ -14,7 +14,7 @@ AGX 現在分為兩個獨立的構建系統：
 - **特點**: 快速迭代開發
 
 ### 2️⃣ ROS 工作空間 🤖
-- **模組**: base, bridge, control
+- **模組**: base, control
 - **工作流**: `ros1_ws-ci.yml`
 - **配置**: `ros1_ws/modules.yaml`
 - **構建時間**: 35-45 分鐘 (ROS 改動時)
@@ -45,7 +45,6 @@ agx/
 ros1_ws/                              ⭐ 隔離的工作空間
 ├── modules.yaml                      ⭐ ROS 模組配置
 ├── base/
-├── bridge/
 └── control/
 ```
 
@@ -140,7 +139,7 @@ ros1_ws-ci.yml (45 分鐘)
 .github/scripts/ros1_ws-build.sh control
 
 # Lint ROS 模組
-.github/scripts/ros1_ws-lint.sh bridge
+.github/scripts/ros1_ws-lint.sh base
 ```
 
 ---
@@ -166,7 +165,6 @@ FROM agx-ros1_ws-control:latest
    ↓
 2. ros1_ws-ci.yml 構建並發佈鏡像
    - agx-ros1_ws-base:latest
-   - agx-ros1_ws-bridge:latest
    - agx-ros1_ws-control:latest
    ↓
 3. 應用層 Dockerfile 引用上述鏡像

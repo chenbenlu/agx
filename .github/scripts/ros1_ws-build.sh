@@ -18,7 +18,6 @@ if [ -z "$MODULE" ]; then
     echo "Available ROS modules:"
     echo "  - base        (ROS L4T base image)"
     echo "  - base-arm64  (ROS L4T base ARM64)"
-    echo "  - bridge      (ROS 1 <-> ROS 2 bridge)"
     echo "  - control     (SLAM & Localization)"
     exit 1
 fi
@@ -41,13 +40,6 @@ case "$MODULE" in
         BUILD_ARGS=""
         PLATFORMS="linux/arm64"
         TAG="agx-ros1_ws-base-arm64:latest"
-        ;;
-    bridge)
-        MODULE_PATH="ros1_ws/bridge"
-        DOCKERFILE="Dockerfile"
-        BUILD_ARGS=""
-        PLATFORMS="linux/amd64"
-        TAG="agx-ros1_ws-bridge:latest"
         ;;
     control)
         MODULE_PATH="ros1_ws/control"

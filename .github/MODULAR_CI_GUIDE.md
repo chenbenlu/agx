@@ -1,4 +1,7 @@
-# 🚀 AGX 模組化 CI 系統
+# 🚀 AGX 模組化 CI 系統 (已過時 - v1)
+
+⚠️ **注意**: 本文檔為舊版本 (v1)，已由 **ISOLATION_ARCHITECTURE.md** (v2.1) 取代。
+建議查看最新文檔以瞭解當前 CI 架構。
 
 ## 概述
 
@@ -63,10 +66,9 @@ ci_strategy:
 | 優先級 | 名稱 | 模組 | 說明 |
 |-------|------|------|------|
 | 1 | TIER 1 | `ros1_ws_base` | 基礎鏡像，其他模組依賴 |
-| 2 | TIER 2 | `ros1_ws_bridge`, `ros1_ws_control` | 核心 ROS 服務 |
+| 2 | TIER 2 | `ros1_ws_control` | 核心 ROS 服務 |
 | 3 | TIER 3 | `vlm`, `planning`, `foxglove`, etc. | 應用服務，可並行 |
 | 4 | TIER 4 | `dashboard` | 管理工具 |
-| 5 | TIER 5 | `ros_zenoh_bridge` | 可選服務 |
 
 ---
 
@@ -92,7 +94,7 @@ python .github/scripts/generate_ci.py --detect
     └─ Dockerfile.l4t
 
 📦 STAGE 1:
-  ros1_ws_bridge       ⭐ CRITICAL      ROS 1 <-> ROS 2 Bridge
+  ros1_ws_control       ⭐ CRITICAL      ROS 1 Control (SLAM & Localization)
     └─ Dockerfile
     └─ Depends on: ros1_ws_base
 
@@ -164,13 +166,11 @@ python .github/scripts/generate_ci.py --generate --output .github/workflows/dock
 ```
 TIER 1: ros1_ws_base (L4T)
     ↓
-TIER 2: ros1_ws_bridge, ros1_ws_control (並行)
+TIER 2: ros1_ws_control
     ↓
 TIER 3: vlm, planning, foxglove, nanollm, alpamayo (並行)
     ↓
 TIER 4: dashboard
-    ↓
-TIER 5: ros_zenoh_bridge (可選)
 ```
 
 ### PR 場景（只改動 planning）
@@ -186,7 +186,7 @@ TIER 3: ✅ BUILD planning (改動檢測到)
 ```
 TIER 1: ✅ BUILD ros1_ws_base
     ↓ (等待完成)
-TIER 2: ✅ BUILD ros1_ws_bridge + ros1_ws_control (並行)
+TIER 2: ✅ BUILD ros1_ws_control
     ↓ (等待完成)
 TIER 3: ✅ BUILD vlm + planning + foxglove + ... (並行)
 ```

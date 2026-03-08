@@ -16,16 +16,6 @@ modules:
     depends_on: []
 
   # === TIER 2: ROS 工作空間服務 ===
-  bridge:
-    path: bridge
-    priority: 2
-    description: "ROS 1 <-> ROS 2 Bridge"
-    dockerfiles:
-      - Dockerfile
-    critical: true
-    depends_on:
-      - base
-
   control:
     path: control
     priority: 2
@@ -102,10 +92,6 @@ outputs:
         - "agx-ros1_ws-base:latest"
         - "agx-ros1_ws-base:noetic"
 
-    bridge:
-      tags:
-        - "agx-ros1_ws-bridge:latest"
-
     control:
       tags:
         - "agx-ros1_ws-control:latest"
@@ -114,5 +100,4 @@ outputs:
   # 用於應用層的鏡像引用
   app_layer:
     base_image: "agx-ros1_ws-base:latest"
-    bridge_image: "agx-ros1_ws-bridge:latest"
     control_image: "agx-ros1_ws-control:latest"

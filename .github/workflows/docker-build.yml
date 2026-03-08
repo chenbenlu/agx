@@ -100,9 +100,14 @@ jobs:
           # 添加文件路徑和 Dockerfile
           BUILD_CMD="$BUILD_CMD -f $FULL_DOCKERFILE $MODULE_PATH"
 
-          # 如果只有 x86_64，使用 --load；否則不加（無法加載多平台）
-          if [ "$PLATFORMS" = "linux/amd64" ]; then
+          # 針對單平台構建添加 --load（包括 amd64 和 arm64）
+          # 只有多平台構建（使用逗號分隔）時才不添加 --load
+          if ! echo "$PLATFORMS" | grep -q ','; then
+            # 單平台構建：amd64 或 arm64
             BUILD_CMD="$BUILD_CMD --load"
+          else
+            # 多平台構建：緩存在 builder context 中，無法直接加載
+            echo "⚠️  Multi-platform build detected - using builder cache"
           fi
 
           echo "Running: $BUILD_CMD"

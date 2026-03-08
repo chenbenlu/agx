@@ -169,7 +169,8 @@ jobs:
             ros1_ws/base -f ros1_ws/base/Dockerfile.l4t \
             --tag agx-ros1_ws-base-arm64:latest \
             --label module=ros1_ws_base_arm64 \
-            --label ros_distro=noetic
+            --label ros_distro=noetic \
+            --load
           docker system prune -a -f
 
   # ============================================================================

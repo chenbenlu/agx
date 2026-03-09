@@ -200,7 +200,7 @@ TeleopKeyboard::TeleopKeyboard() :
         }
     }
     
-    cmd_pub_ = nh_.advertise<std_msgs::UInt8>("keycmd_vel", 10);
+    cmd_pub_ = nh_.advertise<std_msgs::UInt8>("sixwheel_keycmd", 10);
     // imu_pub_ = nh_.advertise<sensor_msgs::Imu>("processed_imu", 10);
     imu_float_pub_ = nh_.advertise<std_msgs::Float32MultiArray>("processed_imu_float", 10);
     imu_sub_ = nh_.subscribe("/imu/data", 100, &TeleopKeyboard::imuCallback, this); // 增大隊列以應對高負載
@@ -591,7 +591,7 @@ void TeleopKeyboard::saveImuAndMotionData() {
 }
 
 int main(int argc, char **argv) {
-    ros::init(argc, argv, "keyboard_teleop");
+    ros::init(argc, argv, "sixwheel_keyteletop");
     TeleopKeyboard teleop;
     ros::AsyncSpinner spinner(4);
     spinner.start();

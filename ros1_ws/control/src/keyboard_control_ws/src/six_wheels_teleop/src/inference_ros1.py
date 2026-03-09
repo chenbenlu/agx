@@ -123,9 +123,10 @@ class RLInferenceNode:
 
         # Outdoor goal
         # self.stage_goal = [(-2.0, -6.0, 0.04)] 
+        self.stage_goal = [(17.0, -17.0, 0.04)] 
 
         # B1 gaol
-        self.stage_goal =[(5.0, 0, 0)]
+        # self.stage_goal =[(5.0, 0, 0)]
 
         # === 推論計數器 ===
         self.inf_count = 0
@@ -310,13 +311,15 @@ class RLInferenceNode:
             return
 
         cmd = Twist()
+        # cmd.linear.x = float(max(0, action[0] * 0.5))
         cmd.linear.x = float(max(0, action[0] * 0.9))
+
         cmd.angular.z = float(np.clip(action[1], -W_MAX, W_MAX))
         # print(cmd)
 
         # 距離 1 公尺要減速(0.5m車體前半身)
-        if self.min_laser <= 1.0: 
-            cmd.linear.x = 0.0
+        if self.min_laser <= 0.5: 
+            cmd.linear.x = 0.1
             cmd.angular.z = 0.0
         # 0.5
         if dist_to_goal < 0.75:   

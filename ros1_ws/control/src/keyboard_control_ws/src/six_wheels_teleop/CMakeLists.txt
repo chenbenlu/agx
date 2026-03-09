@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5.2)
+cmake_minimum_required(VERSION 3.0.2)
 project(six_wheels_teleop)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
@@ -257,5 +257,4 @@ target_link_libraries(imu_teletop_0908 ${catkin_LIBRARIES})
 
 add_executable(inference_collect src/inference_collect.cpp)
 target_link_libraries(inference_collect ${catkin_LIBRARIES})
-
 

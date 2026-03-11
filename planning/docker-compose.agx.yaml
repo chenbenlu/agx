@@ -2,3 +2,9 @@ services:
   planning:
     network_mode: host
     runtime: nvidia
+    ipc: host
+    volumes:
+      # 分別掛載開發的 Package，避免覆蓋掉被放在 src 中的 urg_node2
+      - ./src/car_control:/root/ros2_ws/src/car_control
+      - ./src/rl_navigator:/root/ros2_ws/src/rl_navigator
+      - ./src/models:/root/ros2_ws/src/models

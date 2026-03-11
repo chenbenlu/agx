@@ -747,8 +747,9 @@
         </div>
         <div>
           ${active
-              ? `<button class="btn btn-red" onclick="taskStop('${id}')">⏹</button>`
-              : `<button class="btn btn-green" onclick="taskLaunch('${group}','${id}')">▶</button>`}
+              ? `<button class="btn btn-red" onclick="taskStop('${id}')">⏹</button>
+                 <button class="btn" style="margin-left:4px" onclick="showTaskLogs('${id}')">📋 Logs</button>`
+              : `<button class="btn btn-green" onclick="taskLaunch('${group}','${id}')">▶ Start</button>`}
         </div>`;
           grid.appendChild(card);
         }
@@ -795,6 +796,15 @@
       v.classList.add('visible');
       v.textContent = 'Loading...';
       const r = await api('GET', `/api/logs?folder=${folder}&lines=80`);
+      v.textContent = r.stdout || r.stderr || 'No logs';
+      v.scrollTop = v.scrollHeight;
+    }
+
+    async function showTaskLogs(task) {
+      const v = document.getElementById('logViewer');
+      v.classList.add('visible');
+      v.textContent = 'Loading...';
+      const r = await api('GET', `/api/task/logs?task=${task}`);
       v.textContent = r.stdout || r.stderr || 'No logs';
       v.scrollTop = v.scrollHeight;
     }

@@ -19,8 +19,6 @@ const PROJECT = process.env.PROJECT_NAME || 'agx_ros';
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 const SERVICES = {
-    control: { name: 'ROS 1 底層控制', container: 'control', icon: '🎮' },
-    bridge: { name: 'ROS 1↔2 橋樑', container: 'bridge', icon: '🌉' },
     planning: { name: 'ROS 2 高階規劃', container: 'planning', icon: '🧭' },
     foxglove: { name: '資料視覺化', container: 'foxglove', icon: '📊' },
     vlm: { name: 'Isaac ROS 視覺加速', container: 'isaac_ros', icon: '👁️' },
@@ -28,16 +26,6 @@ const SERVICES = {
 };
 
 const TASKS = {
-    control: {
-        label: 'Control Tasks (ROS 1)',
-        container: 'control',
-        items: {
-            agx_keyboard: { name: '鍵盤控制', cmd: 'rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0', icon: '⌨️' },
-            agx_lidar: { name: 'Lidar 建圖', cmd: 'roslaunch velodyne_pointcloud VLP16_points.launch', icon: '📡' },
-            agx_loc: { name: 'HDL 定位', cmd: 'roslaunch hdl_localization hdl_localization.launch', icon: '📍' },
-            agx_camera: { name: 'Realsense', cmd: 'roslaunch realsense2_camera rs_camera.launch', icon: '📷' },
-        },
-    },
     planning: {
         label: 'Planning Tasks (ROS 2)',
         container: 'planning',
@@ -228,8 +216,8 @@ app.post('/api/task/launch', async (req, res) => {
         return res.json({ ok: true, stdout: `Task '${task}' already running.` });
     }
 
-    // Launch inside container's tmux
-    await runCmd(`docker exec -d ${container} tmux new-session -d -s ${task} bash -c "${cmd}; exec bash"`);
+    // Launch inside container's tmux (interactive shell so ~/.bashrc loads ROS)
+    await runCmd(`docker exec -d ${container} tmux new-session -d -s ${task} bash -ic "${cmd}; exec bash"`);
     res.json({ ok: true, stdout: `Task '${task}' launched.` });
 });
 
@@ -238,12 +226,12 @@ app.post('/api/task/stop', async (req, res) => {
     if (task === 'all') {
         const sessions = await getTmuxSessions();
         for (const s of sessions) {
-            await runCmd(`docker exec planning tmux kill-session -t ${s} 2>/dev/null; docker exec control tmux kill-session -t ${s} 2>/dev/null`);
+            await runCmd(`docker exec planning tmux kill-session -t ${s} 2>/dev/null`);
         }
         return res.json({ ok: true, stdout: `Stopped ${sessions.length} task(s).` });
     }
-    // Try both containers
-    await runCmd(`docker exec planning tmux kill-session -t ${task} 2>/dev/null; docker exec control tmux kill-session -t ${task} 2>/dev/null`);
+    // Try container
+    await runCmd(`docker exec planning tmux kill-session -t ${task} 2>/dev/null`);
     res.json({ ok: true });
 });
 
@@ -255,6 +243,13 @@ app.get('/api/logs', async (req, res) => {
     } else {
         r = await runCmd(`docker compose -f /project/docker-compose.yaml -p ${PROJECT} logs --tail ${lines}`, 10000);
     }
+    res.json(r);
+});
+
+app.get('/api/task/logs', async (req, res) => {
+    const { task } = req.query;
+    if (!task) return res.json({ ok: false, error: 'Task not specified' });
+    const r = await runCmd(`docker exec planning tmux capture-pane -t ${task} -p -S -50 2>/dev/null`);
     res.json(r);
 });
 

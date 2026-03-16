@@ -17,12 +17,18 @@ services:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - DISPLAY=${DISPLAY}
       - XAUTHORITY=/tmp/.docker.xauth
-
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyUSB1:/dev/ttyUSB1
     volumes:
       - /run/jtop.stats.sock:/run/jtop.stats.sock
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      # 分別掛載開發的 Package，避免覆蓋掉被放在 src 中的 urg_node2
+      - ./src/car_control:/root/ros2_ws/src/car_control
+      - ./src/rl_navigator:/root/ros2_ws/src/rl_navigator
+      - ./src/models:/root/ros2_ws/src/models
     tty: true
     stdin_open: true

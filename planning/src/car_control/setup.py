@@ -31,6 +31,7 @@ setup(
         'console_scripts': [    # 定義主程式節點
             # 呼叫時的名稱 = 套件名稱.主程式名稱:主函式
             'car_controller_node = car_control.car_controller:main',
+            'cmd_vel_to_serial_node = car_control.cmd_vel_to_serial:main',
         ],
     },
 )

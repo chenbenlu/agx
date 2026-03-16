@@ -20,6 +20,7 @@ services:
     devices:
       - /dev/ttyUSB0:/dev/ttyUSB0
       - /dev/ttyUSB1:/dev/ttyUSB1
+      - /dev/ttyACM0:/dev/ttyACM0
     volumes:
       - /run/jtop.stats.sock:/run/jtop.stats.sock
       - /etc/localtime:/etc/localtime:ro

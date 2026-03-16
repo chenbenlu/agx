@@ -55,6 +55,7 @@ RUN apt-get update && \
     ros-${ROS_DISTRO}-teleop-twist-keyboard \
     tmux \
     zenoh-bridge-ros2dds \
+    nlohmann-json3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # =======================================================

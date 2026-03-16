@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+"""Wrapper script: car_controller_node (Python legacy)"""
+from car_control.car_controller import main
+main()

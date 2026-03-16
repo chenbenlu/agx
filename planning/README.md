@@ -31,11 +31,14 @@ fi
 ros2 launch urg_node2 urg_node2.launch.py
 ```
 
-### SLAM bringup
+<!-- ### SLAM bringup
 ```bash
 ros2 launch car_control slam_bringup.launch.py
+``` -->
+### car sensor bringup
+``` bash
+ros2 launch car_control car_sensor_cpp.launch.py
 ```
-
 ### keyboard control
 ```bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard

@@ -24,6 +24,16 @@ services:
       - TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
       - HF_TOKEN=${HF_TOKEN:-}
     privileged: true
+    devices:
+      - /dev/snd
+      - /dev/bus/usb
+      - /dev/video*
+      - /dev/media*
+      # - /dev/video1
+      # - /dev/video2
+      # - /dev/video3
+      # - /dev/video4
+      # - /dev/video5
     volumes:
       - /tmp/argus_socket:/tmp/argus_socket
       - /etc/enctune.conf:/etc/enctune.conf
@@ -37,7 +47,7 @@ services:
       - /home/systemlabagx/disk/workspaces/data:/data
       - /home/systemlabagx/disk/workspaces/data/cosmos_cache:/root/.cache
       - /home/systemlabagx/disk/workspaces:/workspaces
-    working_dir: /opt/cosmos-reason2
+    working_dir: /workspaces/cosmos_ws
     stdin_open: true
     tty: true
     command: ["bash", "-lc", "sleep infinity"]

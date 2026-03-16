@@ -1,0 +1,28 @@
+# =============================================================================
+#  car_control C++ 節點參數配置
+#  用於 serial_bridge_node + kinematics_node 架構
+#
+#  啟動方式：
+#    ros2 launch car_control car_sensor_cpp.launch.py
+# =============================================================================
+
+# ----- Serial Bridge Node -----
+serial_bridge_node:
+  ros__parameters:
+    usb_port: '/dev/ttyACM0'       # Arduino Serial 裝置路徑
+    baudrate: 115200               # 鮑率（需與 Arduino Serial.begin() 一致）
+    serial_read_hz: 50             # Serial 讀取頻率 (Hz)，建議 ≥ odom_up_hz * 2
+
+# ----- Kinematics Node -----
+kinematics_node:
+  ros__parameters:
+    # 車體參數
+    car_distance: 0.65             # 輪距：左右輪中心距離 (m)
+    car_mode: 'diff'               # 運動模式：'diff' (差速)
+    Tire_diameter: 0.18            # 車輪直徑 (m)
+    # 馬達 / 編碼器參數
+    encoder_resolution: 720        # 編碼器每圈脈衝數
+    gear_ratio: 1.0                # 減速比（馬達端:輪端）
+    # Odom / ROS 參數
+    odom_up_hz: 10                 # Odometry 更新頻率 (Hz)，僅開迴路模式使用
+    use_encoder_feedback: true     # true: 閉迴路 (encoder)；false: 開迴路 (cmd_vel 積分)

@@ -115,20 +115,18 @@ public:
             std::bind(&KinematicsNode::serial_rx_callback, this, std::placeholders::_1));
 
         // --- Timer ---
-        const auto period = std::chrono::milliseconds(1000 / odom_up_hz_);
-
-        if (use_encoder_feedback_) {
-            // 閉迴路模式：定時向 Arduino 發送 encoder 讀取請求
-            // Arduino 收到 {"rpos":1} 回傳 {"pos_1": <ticks>}
-            // Arduino 收到 {"rpos":2} 回傳 {"pos_2": <ticks>}
-            encoder_poll_timer_ = this->create_wall_timer(
-                period, std::bind(&KinematicsNode::encoder_poll_callback, this));
-            RCLCPP_INFO(this->get_logger(), "閉迴路模式：每 %d ms 輪詢一次 encoder",
-                        static_cast<int>(1000 / odom_up_hz_));
-        } else {
-            // 開迴路模式：定時以 cmd_vel 積分計算 Odom
+        if (!use_encoder_feedback_) {
+            // 開迴路模式：定時以 cmd_vel 積分 Odom
+            const auto period = std::chrono::milliseconds(1000 / odom_up_hz_);
             odom_timer_ = this->create_wall_timer(
                 period, std::bind(&KinematicsNode::odom_openloop_callback, this));
+            RCLCPP_INFO(this->get_logger(), "開迴路模式：以 %d Hz 積分 Odom",
+                        static_cast<int>(odom_up_hz_));
+        } else {
+            // 閉迴路模式：等待 Arduino 主動 push {"p1":x,"p2":y}
+            // 不需要任何 Timer，Odom 由 serial_rx callback 直接觸發
+            RCLCPP_INFO(this->get_logger(),
+                        "閉迴路模式：等待 Arduino Push {\"p1\":x,\"p2\":y}");
         }
 
         RCLCPP_INFO(this->get_logger(), "Kinematics Node 啟動完成");
@@ -196,17 +194,12 @@ private:
     // =========================================================================
 
     /**
-     * @brief /serial_rx 回呼 — 解析 Arduino 回傳的 JSON
+     * @brief /serial_rx 回呼 — 解析 Arduino 主動推送的 JSON
      *
-     * Arduino 回傳格式（由 driver_read_pos 產生）：
-     *   {"pos_1" : <left_encoder_ticks>}
-     *   {"pos_2" : <right_encoder_ticks>}
+     * Arduino 回傳新格式（push_encoder() 產生）：
+     *   {"p1": <左輪ticks>, "p2": <右輪ticks>}
      *
-     * 逆運動學：
-     *   delta_left_dist  = delta_left_ticks  * distance_per_pulse
-     *   delta_right_dist = delta_right_ticks * distance_per_pulse
-     *   v_x = (delta_right + delta_left) / (2 * dt)
-     *   w_z = (delta_right - delta_left) / (car_distance * dt)
+     * 收到就直接觸發逆運動學計算，不需等待兩個分離的封包。
      */
     void serial_rx_callback(const std_msgs::msg::String::SharedPtr msg)
     {
@@ -215,24 +208,14 @@ private:
         try {
             auto j = json::parse(msg->data);
 
-            // 檢查是否包含 encoder 位置
-            if (j.contains("pos_1")) {
-                last_left_encoder_ = j["pos_1"].get<long>();
-                left_encoder_received_ = true;
-            }
-            if (j.contains("pos_2")) {
-                last_right_encoder_ = j["pos_2"].get<long>();
-                right_encoder_received_ = true;
+            // 新格式：{"p1": x, "p2": y} 左右輪同封包
+            if (j.contains("p1") && j.contains("p2")) {
+                last_left_encoder_  = j["p1"].get<long>();
+                last_right_encoder_ = j["p2"].get<long>();
+                compute_encoder_odom(); // 直接觸發，不需等待兩次
             }
 
-            // 兩個 encoder 都收到後，計算 Odom
-            if (left_encoder_received_ && right_encoder_received_) {
-                compute_encoder_odom();
-            }
-
-        } catch (const json::parse_error &e) {
-            // Arduino 可能會傳送一般的 debug string (例如 "Entering Configuration Mode Successful!")
-            // 這裡改成 DEBUG，避免洗版
+        } catch (const json::parse_error &) {
             RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
                                   "丟棄非 JSON 字串: %s", msg->data.c_str());
         }
@@ -265,37 +248,9 @@ private:
             publish_odom_and_tf(current_time, odom_vx, odom_vy, odom_wz);
         }
 
-        // 更新上一次 encoder 值
         prev_left_encoder_  = last_left_encoder_;
         prev_right_encoder_ = last_right_encoder_;
         last_time_ = current_time;
-
-        // Reset flags for next cycle
-        left_encoder_received_ = false;
-        right_encoder_received_ = false;
-    }
-
-    // =========================================================================
-    //  Encoder 輪詢 (閉迴路模式)
-    // =========================================================================
-
-    /**
-     * @brief 定時向 Arduino 發送 encoder 讀取請求
-     *        Arduino 的 json_read_pos() 會解析 {"rpos": <addr>}
-     *        然後呼叫 driver_read_pos() 回傳 {"pos_<addr>": <ticks>}
-     */
-    void encoder_poll_callback()
-    {
-        // 交替發送左右輪 encoder 請求，避免同時發送造成 Arduino 來不及處理
-        auto tx_msg = std_msgs::msg::String();
-
-        if (poll_left_next_) {
-            tx_msg.data = "{\"rpos\":1}";
-        } else {
-            tx_msg.data = "{\"rpos\":2}";
-        }
-        pub_serial_tx_->publish(tx_msg);
-        poll_left_next_ = !poll_left_next_;
     }
 
     // =========================================================================
@@ -404,9 +359,7 @@ private:
     // --- Encoder 追蹤 ---
     long last_left_encoder_{0};
     long last_right_encoder_{0};
-    bool left_encoder_received_{false};
-    bool right_encoder_received_{false};
-    std::optional<long> prev_left_encoder_;   // 上一輪的 encoder，初始為空
+    std::optional<long> prev_left_encoder_;
     std::optional<long> prev_right_encoder_;
 
     // --- ROS 介面 ---
@@ -417,9 +370,7 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_vel_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_serial_rx_;
 
-    rclcpp::TimerBase::SharedPtr odom_timer_;           // 僅開迴路模式使用
-    rclcpp::TimerBase::SharedPtr encoder_poll_timer_;   // 閉迴路模式：定時輪詢 encoder
-    bool poll_left_next_{true};                         // 交替輪詢左/右輪
+    rclcpp::TimerBase::SharedPtr odom_timer_;  // 僅開迴路模式使用
 };
 
 // =============================================================================

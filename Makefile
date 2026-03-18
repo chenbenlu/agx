@@ -322,12 +322,13 @@ define SCRIPT_PLAN
     echo "2) SLAM Bringup       (slam_bringup)"
     echo "3) Keyboard Control   (teleop_twist_keyboard)"
     echo "4) Save Map           (map_saver)"
+    echo "5) Car Control        (car_sensor_cpp)"
     echo "------------------------------------------"
     echo "a) Launch ALL    q) Quit"
     echo "------------------------------------------"
-    read -p "Select task(s) [1-4/a/q, 可多選如 1 2]: " INPUT
+    read -p "Select task(s) [1-5/a/q, 可多選如 1 2]: " INPUT
     if [ "$$INPUT" = "q" ]; then exit 0; fi
-    if [ "$$INPUT" = "a" ]; then INPUT="1 2 3 4"; fi
+    if [ "$$INPUT" = "a" ]; then INPUT="1 2 3 4 5"; fi
     CHOICES=$$(echo "$$INPUT" | tr ',' ' ')
     LAUNCHED=0
     for choice in $$CHOICES; do
@@ -337,6 +338,7 @@ define SCRIPT_PLAN
             2) S_NAME="plan_slam";     CMD_MAIN="ros2 launch car_control slam_bringup.launch.py";;
             3) S_NAME="plan_keyboard"; CMD_MAIN="ros2 run teleop_twist_keyboard teleop_twist_keyboard";;
             4) S_NAME="plan_savemap";  CMD_MAIN="ros2 run nav2_map_server map_saver_cli -f /root/ros2_ws/src/car_control/config/my_map";;
+            5) S_NAME="plan_carctrl";  CMD_MAIN="cd /root/ros2_ws && colcon build --packages-select car_control --symlink-install && source install/setup.bash && ros2 launch car_control car_sensor_cpp.launch.py";;
             *) echo "[Warn] Skipping invalid option: $$choice"; continue;;
         esac
         if TMUX= tmux has-session -t $$S_NAME 2>/dev/null; then

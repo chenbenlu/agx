@@ -11,7 +11,7 @@ serial_bridge_node:
   ros__parameters:
     usb_port: '/dev/ttyACM0'       # Arduino Serial 裝置路徑
     baudrate: 115200               # 鮑率（需與 Arduino Serial.begin() 一致）
-    serial_read_hz: 50             # Serial 讀取頻率 (Hz)，建議 ≥ odom_up_hz * 2
+    serial_read_hz: 100            # Serial 讀取頻率 (Hz)。Arduino 20Hz push，100Hz 讀取確保低延遲
 
 # ----- Kinematics Node -----
 kinematics_node:
@@ -24,5 +24,5 @@ kinematics_node:
     encoder_resolution: 720        # 編碼器每圈脈衝數
     gear_ratio: 1.0                # 減速比（馬達端:輪端）
     # Odom / ROS 參數
-    odom_up_hz: 10                 # Odometry 更新頻率 (Hz)，僅開迴路模式使用
-    use_encoder_feedback: true     # true: 閉迴路 (encoder)；false: 開迴路 (cmd_vel 積分)
+    odom_up_hz: 10                 # Odometry 更新頻率 (Hz)，開迴路模式使用
+    use_encoder_feedback: true     # Arduino Push 架構：收到 {"p1":x,"p2":y} 即觸發

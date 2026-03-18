@@ -84,12 +84,12 @@ class car:
     def drive_init(self,usb_port):   # 驅動器初始化
         self.Drive = serial.Serial(
             port=usb_port,  # USB port for the car controller    
-            baudrate=9600,
+            baudrate=115200,
             # 8n2
             bytesize=serial.EIGHTBITS,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_TWO,
-            timeout=1
+            timeout=0.002
         )
     def set_drive_speed(self, slave_id  , speed):   # 設定驅動器速度 (驅動器ID, 執行的速度)
         function_code = 0x06      # 寫單一暫存器
@@ -102,7 +102,11 @@ class car:
         # 加上 CRC
         full_packet = frame + self.calc_crc(frame)
         #print(f"Sending: {full_packet.hex()}")
+
+        # 【關鍵修正】：發送前徹底清空緩衝區，防止讀到上一次的垃圾資料
+        self.Drive.reset_input_buffer()    
         self.Drive.write(full_packet)
+        self.Drive.flush() # 【關鍵修正】：強制 OS 立即將 USB 緩衝區推播出去
         # 接收回應（寫單一暫存器通常回傳同樣的資料）
         response = self.Drive.read(8)
         #print(f"Received: {response.hex()}")
@@ -115,6 +119,7 @@ class car:
         full_packet = frame + self.calc_crc(frame)
         self.Drive.reset_input_buffer()  # 清除殘留資料
         self.Drive.write(full_packet)
+        self.Drive.flush() # 【關鍵修正】：確保立刻發送
         # 回應格式: id(1) + 03(1) + 04(1) + data(4) + crc(2) = 9 bytes
         response = self.Drive.read(9)
         if len(response) < 9:

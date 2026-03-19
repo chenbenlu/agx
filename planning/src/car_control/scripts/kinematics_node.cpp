@@ -1,27 +1,38 @@
 /**
  * @file kinematics_node.cpp
- * @brief ROS 2 Kinematics Node — 處理 cmd_vel→輪速 (正運動學) 與 encoder→Odom/TF (逆運動學)
+ * @brief ROS 2 Kinematics Node — 處理 cmd_vel→輪速 與 encoder→Odom/TF，整合電量與充電站狀態
  *
- * 職責：
- *   1. 訂閱 /cmd_vel (geometry_msgs/Twist)
- *      → 差速運動學計算左右輪 RPM
- *      → 打包成 JSON 發布至 /serial_tx (由 serial_bridge_node 寫入 UART)
+ * 架構：
+ *   ┌──────────────────────────────────────────────────────────────────────────┐
+ *   │  kinematics_node                                                        │
+ *   │                                                                          │
+ *   │  [輸入]                                                                  │
+ *   │    /cmd_vel  (Twist)          → 差速逆運動學 → /motor_cmd (JSON String)  │
+ *   │    /raw_odom (String)         → 正運動學 → /odom + TF (odom→base_link)   │
+ *   │    /battery_state (String)    → 解析電壓 → /battery_voltage (Float32)    │
+ *   │    /charge_status (String)    → 解析狀態 → /charging_state (String)      │
+ *   │                                                                          │
+ *   │  [重要] 時間戳使用「收到 JSON 瞬間的 now()」，確保 TF 精準度             │
+ *   └──────────────────────────────────────────────────────────────────────────┘
  *
- *   2. 訂閱 /serial_rx (std_msgs/String)
- *      → 解析 Arduino 回傳的 encoder JSON (pos_1, pos_2)
- *      → 差速逆運動學計算 Odometry
- *      → 發布 /odom (nav_msgs/Odometry) 與 TF (odom → base_link)
+ * 運動學公式 (差速驅動)：
+ *   正運動學 (cmd_vel → 輪速)：
+ *     v_left  = linear_x - (angular_z × L / 2)
+ *     v_right = linear_x + (angular_z × L / 2)
+ *     RPM = (v / (π × D)) × 60 × gear_ratio
  *
- * 設計理念：
- *   - 這是一個純數學/ROS 訊息的節點，完全不碰硬體
- *   - 所有運動學公式保留原始 Python 版本的計算邏輯
- *   - 可獨立進行單元測試
+ *   逆運動學 (encoder → Odom)：
+ *     dist_L = Δp1 × (π × D / total_pulses)
+ *     dist_R = Δp2 × (π × D / total_pulses)
+ *     vx = (dist_R + dist_L) / (2 × dt)
+ *     wz = (dist_R - dist_L) / (L × dt)
  *
- * 編譯依賴：rclcpp, std_msgs, geometry_msgs, nav_msgs, tf2_ros, nlohmann_json
+ * 編譯依賴：rclcpp, std_msgs, geometry_msgs, nav_msgs, tf2_ros, tf2, nlohmann_json
  */
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/float32.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -33,6 +44,7 @@
 #include <cmath>
 #include <string>
 #include <optional>
+#include <sstream>
 
 using json = nlohmann::json;
 
@@ -43,7 +55,7 @@ public:
         : Node("kinematics_node")
     {
         // =====================================================================
-        //  參數宣告與讀取（與原 Python 版完全對應）
+        //  參數宣告與讀取
         // =====================================================================
         this->declare_parameter<double>("car_distance", 0.65);
         this->declare_parameter<std::string>("car_mode", "diff");
@@ -52,6 +64,8 @@ public:
         this->declare_parameter<double>("gear_ratio", 1.0);
         this->declare_parameter<int>("odom_up_hz", 10);
         this->declare_parameter<bool>("use_encoder_feedback", true);
+        this->declare_parameter<std::string>("odom_frame", "odom");
+        this->declare_parameter<std::string>("base_frame", "base_link");
 
         car_distance_        = this->get_parameter("car_distance").as_double();
         car_mode_            = this->get_parameter("car_mode").as_string();
@@ -60,30 +74,30 @@ public:
         gear_ratio_          = this->get_parameter("gear_ratio").as_double();
         odom_up_hz_          = this->get_parameter("odom_up_hz").as_int();
         use_encoder_feedback_= this->get_parameter("use_encoder_feedback").as_bool();
+        odom_frame_          = this->get_parameter("odom_frame").as_string();
+        base_frame_          = this->get_parameter("base_frame").as_string();
 
         // =====================================================================
         //  衍生常數計算
         // =====================================================================
-        tire_circumference_ = M_PI * tire_diameter_;                             // 輪周長
-        tire_radius_        = tire_diameter_ / 2.0;                              // 輪半徑
-        total_pulses_       = gear_ratio_ * static_cast<double>(encoder_resolution_); // 每圈總脈衝數
-        distance_per_pulse_ = M_PI * tire_diameter_ / total_pulses_;             // 每脈衝行進距離 (m)
+        tire_circumference_ = M_PI * tire_diameter_;
+        tire_radius_        = tire_diameter_ / 2.0;
+        total_pulses_       = gear_ratio_ * static_cast<double>(encoder_resolution_);
+        distance_per_pulse_ = M_PI * tire_diameter_ / total_pulses_;
 
-        // 原 Python car_controller.py 的 speed_1_every_second_speed
-        // = (pi * D / Total_pulses) / 10
-        speed_1_per_second_ = (M_PI * tire_diameter_ / total_pulses_) / 10.0;
-
-        RCLCPP_INFO(this->get_logger(), "--- Kinematics 參數 ---");
-        RCLCPP_INFO(this->get_logger(), "car_distance      = %.3f m", car_distance_);
+        RCLCPP_INFO(this->get_logger(), "======== Kinematics 參數 ========");
+        RCLCPP_INFO(this->get_logger(), "car_distance       = %.3f m", car_distance_);
         RCLCPP_INFO(this->get_logger(), "car_mode           = %s", car_mode_.c_str());
         RCLCPP_INFO(this->get_logger(), "Tire_diameter      = %.3f m", tire_diameter_);
         RCLCPP_INFO(this->get_logger(), "encoder_resolution = %d", encoder_resolution_);
         RCLCPP_INFO(this->get_logger(), "gear_ratio         = %.2f", gear_ratio_);
-        RCLCPP_INFO(this->get_logger(), "odom_up_hz         = %d Hz", odom_up_hz_);
-        RCLCPP_INFO(this->get_logger(), "use_encoder_feedback = %s", use_encoder_feedback_ ? "true" : "false");
         RCLCPP_INFO(this->get_logger(), "tire_circumference = %.4f m", tire_circumference_);
         RCLCPP_INFO(this->get_logger(), "distance_per_pulse = %.6f m", distance_per_pulse_);
-        RCLCPP_INFO(this->get_logger(), "-----------------------");
+        RCLCPP_INFO(this->get_logger(), "odom_frame         = %s", odom_frame_.c_str());
+        RCLCPP_INFO(this->get_logger(), "base_frame         = %s", base_frame_.c_str());
+        RCLCPP_INFO(this->get_logger(), "use_encoder_feedback = %s",
+                     use_encoder_feedback_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "=================================");
 
         // =====================================================================
         //  Odom 狀態初始化
@@ -97,34 +111,51 @@ public:
         last_time_ = this->now();
 
         // =====================================================================
-        //  ROS 介面
+        //  ROS 介面 — Publishers
         // =====================================================================
+        // 馬達速度 JSON → serial_bridge_node
+        pub_motor_cmd_      = this->create_publisher<std_msgs::msg::String>("motor_cmd", 10);
+        // Odometry
+        pub_odom_           = this->create_publisher<nav_msgs::msg::Odometry>("odom", 30);
+        // TF broadcaster (odom → base_link)
+        tf_broadcaster_     = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+        // 電池電壓 (解析後的浮點數)
+        pub_battery_voltage_= this->create_publisher<std_msgs::msg::Float32>("battery_voltage", 10);
+        // 充電站狀態 (解析後的結構化 JSON 字串，供上層決策用)
+        pub_charging_state_ = this->create_publisher<std_msgs::msg::String>("charging_state", 10);
 
-        // --- Publisher ---
-        pub_serial_tx_ = this->create_publisher<std_msgs::msg::String>("serial_tx", 10);
-        pub_odom_       = this->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
-        tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
-
-        // --- Subscriber ---
+        // =====================================================================
+        //  ROS 介面 — Subscribers
+        // =====================================================================
+        // /cmd_vel → 差速運動學 → motor_cmd
         sub_cmd_vel_ = this->create_subscription<geometry_msgs::msg::Twist>(
             "cmd_vel", 10,
             std::bind(&KinematicsNode::cmd_vel_callback, this, std::placeholders::_1));
 
-        sub_serial_rx_ = this->create_subscription<std_msgs::msg::String>(
-            "serial_rx", 10,
-            std::bind(&KinematicsNode::serial_rx_callback, this, std::placeholders::_1));
+        // /raw_odom ← serial_bridge_node (已分流的 encoder JSON)
+        sub_raw_odom_ = this->create_subscription<std_msgs::msg::String>(
+            "raw_odom", 30,
+            std::bind(&KinematicsNode::raw_odom_callback, this, std::placeholders::_1));
 
-        // --- Timer ---
+        // /battery_state ← serial_bridge_node (已分流的電量 JSON)
+        sub_battery_state_ = this->create_subscription<std_msgs::msg::String>(
+            "battery_state", 10,
+            std::bind(&KinematicsNode::battery_state_callback, this, std::placeholders::_1));
+
+        // /charge_status ← serial_bridge_node (已分流的充電站 JSON)
+        sub_charge_status_ = this->create_subscription<std_msgs::msg::String>(
+            "charge_status", 10,
+            std::bind(&KinematicsNode::charge_status_callback, this, std::placeholders::_1));
+
+        // =====================================================================
+        //  開迴路 / 閉迴路 模式切換
+        // =====================================================================
         if (!use_encoder_feedback_) {
-            // 開迴路模式：定時以 cmd_vel 積分 Odom
             const auto period = std::chrono::milliseconds(1000 / odom_up_hz_);
             odom_timer_ = this->create_wall_timer(
                 period, std::bind(&KinematicsNode::odom_openloop_callback, this));
-            RCLCPP_INFO(this->get_logger(), "開迴路模式：以 %d Hz 積分 Odom",
-                        static_cast<int>(odom_up_hz_));
+            RCLCPP_INFO(this->get_logger(), "開迴路模式：以 %d Hz 積分 Odom", odom_up_hz_);
         } else {
-            // 閉迴路模式：等待 Arduino 主動 push {"p1":x,"p2":y}
-            // 不需要任何 Timer，Odom 由 serial_rx callback 直接觸發
             RCLCPP_INFO(this->get_logger(),
                         "閉迴路模式：等待 Arduino Push {\"p1\":x,\"p2\":y}");
         }
@@ -134,22 +165,22 @@ public:
 
 private:
     // =========================================================================
-    //  cmd_vel → 輪速 (正運動學) → Serial TX
+    //  /cmd_vel → 差速運動學 → /motor_cmd
     // =========================================================================
 
     /**
      * @brief /cmd_vel 回呼
      *
-     * 1. 差速運動學：
-     *      v_left  = linear_x - (angular_z * car_distance / 2)
-     *      v_right = linear_x + (angular_z * car_distance / 2)
+     * 差速運動學：
+     *   v_left  = linear_x - (angular_z × L / 2)
+     *   v_right = linear_x + (angular_z × L / 2)
      *
-     * 2. 轉換為 Arduino 驅動器格式：
-     *      - cmd_vel_to_serial.py 使用 RPM 整數: RPM = (v / circumference) * 60 * gear_ratio
-     *      - car_controller.py 使用驅動器脈衝速度: speed_cmd = v / speed_1_every_second_speed
+     * m/s → RPM：
+     *   RPM = (v / circumference) × 60 × gear_ratio
      *
-     *    這裡保留 cmd_vel_to_serial.py 的 JSON 格式 {"m":0,"ls":RPM,"rs":RPM}
-     *    因為 Arduino car_json_cmd.ino 接收的就是這個格式
+     * 輸出 JSON 格式：{"ls":<RPM>, "rs":<RPM>}
+     * ⚠️ 注意：不再包含 "m":0，因為新版 Arduino (ros2_com.ino)
+     *          只認 "ls" 和 "rs" 兩個 Key
      */
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg)
     {
@@ -171,50 +202,53 @@ private:
         const double v_left  = linear_x - (angular_z * car_distance_ / 2.0);
         const double v_right = linear_x + (angular_z * car_distance_ / 2.0);
 
-        // ---- m/s → RPM (同 cmd_vel_to_serial.py) ----
-        // RPM = (v / circumference) * 60 * gear_ratio
-        const int rpm_left  = static_cast<int>((v_left  / tire_circumference_) * 60.0 * gear_ratio_);
-        const int rpm_right = static_cast<int>((v_right / tire_circumference_) * 60.0 * gear_ratio_);
+        // ---- m/s → RPM ----
+        const int rpm_left  = static_cast<int>(
+            (v_left  / tire_circumference_) * 60.0 * gear_ratio_);
+        const int rpm_right = static_cast<int>(
+            (v_right / tire_circumference_) * 60.0 * gear_ratio_);
 
-        // ---- 組合 JSON 並發布至 serial_tx ----
+        // ---- 組合 JSON (使用 nlohmann/json) ----
         json cmd;
-        cmd["m"]  = 0;
         cmd["ls"] = rpm_left;
         cmd["rs"] = rpm_right;
 
         auto tx_msg = std_msgs::msg::String();
         tx_msg.data = cmd.dump();
-        pub_serial_tx_->publish(tx_msg);
+        pub_motor_cmd_->publish(tx_msg);
 
-        RCLCPP_DEBUG(this->get_logger(), "cmd_vel → TX: %s", tx_msg.data.c_str());
+        RCLCPP_DEBUG(this->get_logger(), "cmd_vel → motor_cmd: %s", tx_msg.data.c_str());
     }
 
     // =========================================================================
-    //  Serial RX → Encoder 解析 → Odom/TF (閉迴路逆運動學)
+    //  /raw_odom → Encoder 解析 → Odom + TF (閉迴路)
     // =========================================================================
 
     /**
-     * @brief /serial_rx 回呼 — 解析 Arduino 主動推送的 JSON
+     * @brief /raw_odom 回呼
      *
-     * Arduino 回傳新格式（push_encoder() 產生）：
-     *   {"p1": <左輪ticks>, "p2": <右輪ticks>}
+     * 收到 serial_bridge_node 分流後的 encoder JSON: {"p1":xxx,"p2":xxx}
+     * 「立刻」使用 now() 取得時間戳，然後計算正運動學
      *
-     * 收到就直接觸發逆運動學計算，不需等待兩個分離的封包。
+     * ⚠️ 關鍵：時間戳必須是「ROS 節點收到 JSON 的瞬間」，
+     *         而不是 Arduino 發送的時間（我們無法得知），
+     *         這樣 TF 的時間戳才能與其他感測器正確對齊。
      */
-    void serial_rx_callback(const std_msgs::msg::String::SharedPtr msg)
+    void raw_odom_callback(const std_msgs::msg::String::SharedPtr msg)
     {
         if (!use_encoder_feedback_) return;
+
+        // ⚠️ 在解析之前就取 now()，確保最精準的時間戳
+        const auto stamp_now = this->now();
 
         try {
             auto j = json::parse(msg->data);
 
-            // 新格式：{"p1": x, "p2": y} 左右輪同封包
             if (j.contains("p1") && j.contains("p2")) {
                 last_left_encoder_  = j["p1"].get<long>();
                 last_right_encoder_ = j["p2"].get<long>();
-                compute_encoder_odom(); // 直接觸發，不需等待兩次
+                compute_encoder_odom(stamp_now);
             }
-
         } catch (const json::parse_error &) {
             RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
                                   "丟棄非 JSON 字串: %s", msg->data.c_str());
@@ -223,11 +257,11 @@ private:
 
     /**
      * @brief 從 encoder ticks 計算 Odometry 並發布
+     * @param stamp 使用「收到 JSON 瞬間」的時間戳
      */
-    void compute_encoder_odom()
+    void compute_encoder_odom(const rclcpp::Time &stamp)
     {
-        const auto current_time = this->now();
-        const double dt = (current_time - last_time_).seconds();
+        const double dt = (stamp - last_time_).seconds();
         if (dt <= 0.0) return;
 
         if (prev_left_encoder_.has_value() && prev_right_encoder_.has_value()) {
@@ -241,16 +275,58 @@ private:
             const double odom_vy = 0.0;
             const double odom_wz = (dist_right - dist_left) / (car_distance_ * dt);
 
-            // Odom 積分
             integrate_odom(odom_vx, odom_vy, odom_wz, dt);
-
-            // 發布
-            publish_odom_and_tf(current_time, odom_vx, odom_vy, odom_wz);
+            publish_odom_and_tf(stamp, odom_vx, odom_vy, odom_wz);
         }
 
         prev_left_encoder_  = last_left_encoder_;
         prev_right_encoder_ = last_right_encoder_;
-        last_time_ = current_time;
+        last_time_ = stamp;
+    }
+
+    // =========================================================================
+    //  電池與充電站狀態處理
+    // =========================================================================
+
+    /**
+     * @brief /battery_state 回呼 — 解析 {"pow":24.5}
+     *        發布解析後的電壓浮點數到 /battery_voltage (Float32)
+     */
+    void battery_state_callback(const std_msgs::msg::String::SharedPtr msg)
+    {
+        try {
+            auto j = json::parse(msg->data);
+            if (j.contains("pow")) {
+                auto voltage_msg = std_msgs::msg::Float32();
+                voltage_msg.data = j["pow"].get<float>();
+                pub_battery_voltage_->publish(voltage_msg);
+                RCLCPP_DEBUG(this->get_logger(), "電池電壓: %.1f V", voltage_msg.data);
+            }
+        } catch (const json::parse_error &) {
+            // 忽略
+        }
+    }
+
+    /**
+     * @brief /charge_status 回呼 — 解析 {"can_v":0.00,"can_w":0.00,"c_st":0}
+     *        直接轉發原始 JSON 到 /charging_state，讓上層決策節點使用
+     */
+    void charge_status_callback(const std_msgs::msg::String::SharedPtr msg)
+    {
+        try {
+            auto j = json::parse(msg->data);
+            if (j.contains("can_v") && j.contains("can_w") && j.contains("c_st")) {
+                pub_charging_state_->publish(*msg);
+
+                int c_st = j["c_st"].get<int>();
+                if (c_st == 1) {
+                    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                                         "充電站回報：正在充電");
+                }
+            }
+        } catch (const json::parse_error &) {
+            // 忽略
+        }
     }
 
     // =========================================================================
@@ -274,7 +350,10 @@ private:
     // =========================================================================
 
     /**
-     * @brief 2D Odom 積分 (同原 Python 版)
+     * @brief 2D Odom 積分
+     *   dx = (vx × cos(θ) - vy × sin(θ)) × dt
+     *   dy = (vx × sin(θ) + vy × cos(θ)) × dt
+     *   dθ = wz × dt
      */
     void integrate_odom(double vx, double vy, double wz, double dt)
     {
@@ -288,7 +367,7 @@ private:
     }
 
     /**
-     * @brief 發布 /odom 訊息 與 TF (odom → base_link)
+     * @brief 發布 /odom 訊息與 TF (odom → base_link)
      */
     void publish_odom_and_tf(const rclcpp::Time &stamp,
                              double vx, double vy, double wz)
@@ -297,11 +376,11 @@ private:
         tf2::Quaternion q;
         q.setRPY(0.0, 0.0, theta_);
 
-        // --- TF ---
+        // --- TF: odom → base_link ---
         geometry_msgs::msg::TransformStamped tf;
         tf.header.stamp    = stamp;
-        tf.header.frame_id = "odom";
-        tf.child_frame_id  = "base_link";
+        tf.header.frame_id = odom_frame_;
+        tf.child_frame_id  = base_frame_;
         tf.transform.translation.x = x_;
         tf.transform.translation.y = y_;
         tf.transform.translation.z = 0.0;
@@ -314,8 +393,8 @@ private:
         // --- Odometry ---
         nav_msgs::msg::Odometry odom;
         odom.header.stamp    = stamp;
-        odom.header.frame_id = "odom";
-        odom.child_frame_id  = "base_link";
+        odom.header.frame_id = odom_frame_;
+        odom.child_frame_id  = base_frame_;
 
         odom.pose.pose.position.x = x_;
         odom.pose.pose.position.y = y_;
@@ -336,20 +415,21 @@ private:
     //  成員變數
     // =========================================================================
 
-    // --- 車體/運動學參數 ---
-    double car_distance_;
-    std::string car_mode_;
-    double tire_diameter_;
-    int encoder_resolution_;
-    double gear_ratio_;
-    int odom_up_hz_;
-    bool use_encoder_feedback_;
+    // --- 車體 / 運動學參數 ---
+    double car_distance_;        // 輪距 (m)
+    std::string car_mode_;       // "diff" 差速
+    double tire_diameter_;       // 車輪直徑 (m)
+    int encoder_resolution_;     // 編碼器每圈脈衝數
+    double gear_ratio_;          // 減速比
+    int odom_up_hz_;             // 開迴路 Odom 更新頻率
+    bool use_encoder_feedback_;  // true=閉迴路 (Arduino Push), false=開迴路
+    std::string odom_frame_;     // TF 父 frame
+    std::string base_frame_;     // TF 子 frame
 
-    double tire_circumference_;  // π * D
-    double tire_radius_;
-    double total_pulses_;        // gear_ratio * encoder_resolution
-    double distance_per_pulse_;  // π * D / total_pulses
-    double speed_1_per_second_;  // 原 Python 版 speed_1_every_second_speed
+    double tire_circumference_;  // π × D
+    double tire_radius_;         // D / 2
+    double total_pulses_;        // gear_ratio × encoder_resolution
+    double distance_per_pulse_;  // π × D / total_pulses
 
     // --- Odom 狀態 ---
     double x_, y_, theta_;
@@ -362,15 +442,21 @@ private:
     std::optional<long> prev_left_encoder_;
     std::optional<long> prev_right_encoder_;
 
-    // --- ROS 介面 ---
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_serial_tx_;
+    // --- ROS Publishers ---
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_motor_cmd_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+    rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr pub_battery_voltage_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_charging_state_;
 
+    // --- ROS Subscribers ---
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_vel_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_serial_rx_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_raw_odom_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_battery_state_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_charge_status_;
 
-    rclcpp::TimerBase::SharedPtr odom_timer_;  // 僅開迴路模式使用
+    // --- Timer (僅開迴路模式) ---
+    rclcpp::TimerBase::SharedPtr odom_timer_;
 };
 
 // =============================================================================

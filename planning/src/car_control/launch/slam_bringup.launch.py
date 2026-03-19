@@ -7,13 +7,13 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
 
-    # 1. 啟動底盤車控 (使用您原本寫好的 car_sensor.launch.py)
+    # 1. 啟動底盤車控 (C++ 版 serial_bridge + kinematics)
     car_sensor_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
                 get_package_share_directory('car_control'),
                 'launch',
-                'car_sensor.launch.py'
+                'car_sensor_cpp.launch.py'
             )
         )
     )

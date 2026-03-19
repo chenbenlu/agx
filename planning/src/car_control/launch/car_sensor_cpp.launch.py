@@ -4,12 +4,19 @@
     ros2 launch car_control car_sensor_cpp.launch.py
 
 架構說明：
-    serial_bridge_node — 獨佔 Serial Port，負責 ROS topics ↔ UART JSON 雙向轉換
-    kinematics_node    — 處理 cmd_vel→輪速 與 encoder→Odom/TF
+    serial_bridge_node — 獨佔 Serial Port，獨立 Reader Thread 讀取，
+                         根據 JSON Key 分流發布到 /raw_odom, /battery_state, /charge_status
+    kinematics_node    — 處理 cmd_vel→輪速 與 encoder→Odom/TF，
+                         電量→/battery_voltage，充電站→/charging_state
 
-Data Flow：
-    /cmd_vel → [kinematics_node] → /serial_tx → [serial_bridge_node] → UART TX
-    UART RX → [serial_bridge_node] → /serial_rx → [kinematics_node] → /odom + TF
+Data Flow (下行)：
+    /cmd_vel → [kinematics_node] → /motor_cmd → [serial_bridge_node] → UART TX {"ls":x,"rs":y}
+    /charge_cmd → [serial_bridge_node] → UART TX {"charge":1}
+
+Data Flow (上行)：
+    UART RX {"p1":x,"p2":y}          → [serial_bridge_node] → /raw_odom      → [kinematics_node] → /odom + TF
+    UART RX {"pow":24.5}             → [serial_bridge_node] → /battery_state  → [kinematics_node] → /battery_voltage
+    UART RX {"can_v":x,"can_w":y...} → [serial_bridge_node] → /charge_status → [kinematics_node] → /charging_state
 '''
 
 from launch import LaunchDescription

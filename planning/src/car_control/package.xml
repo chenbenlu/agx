@@ -13,7 +13,6 @@
 
   <!-- ====== 建置工具 ====== -->
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <!-- ====== C++ 編譯依賴 ====== -->
   <build_depend>rclcpp</build_depend>
@@ -25,7 +24,6 @@
 
   <!-- ====== 執行依賴 (C++ & Python 共用) ====== -->
   <exec_depend>rclcpp</exec_depend>
-  <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>

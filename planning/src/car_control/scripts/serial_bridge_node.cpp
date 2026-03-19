@@ -1,16 +1,29 @@
 /**
  * @file serial_bridge_node.cpp
- * @brief ROS 2 Serial Bridge Node — 獨佔 Serial Port，負責 ROS Topics ↔ UART JSON 雙向轉換
+ * @brief ROS 2 Serial Bridge Node — 獨佔 Serial Port，負責 Arduino JSON ↔ ROS Topics 雙向轉換
  *
- * 職責：
- *   1. 訂閱 /serial_tx (std_msgs/String)，將 JSON 字串寫入 Serial Port
- *   2. 定時讀取 Serial Port，將收到的完整 JSON 行發布至 /serial_rx (std_msgs/String)
- *   3. 節點關閉時自動送出停車命令 {"m":0,"ls":0,"rs":0}
+ * 架構：
+ *   ┌────────────────────────────────────────────────────────────────────┐
+ *   │  serial_bridge_node                                               │
+ *   │                                                                    │
+ *   │  [獨立 Reader Thread]                                              │
+ *   │    │  POSIX read() + 行累積                                        │
+ *   │    │  ↓ 逐行 JSON 解析                                             │
+ *   │    ├─ {"p1":x,"p2":y}       → /raw_odom       (std_msgs/String)   │
+ *   │    ├─ {"pow":x}             → /battery_state   (std_msgs/String)   │
+ *   │    ├─ {"can_v":x,...}       → /charge_status   (std_msgs/String)   │
+ *   │    └─ 其他                  → /serial_rx        (std_msgs/String)   │
+ *   │                                                                    │
+ *   │  [ROS Callback]                                                    │
+ *   │    /motor_cmd  (std_msgs/String) → UART TX  {"ls":x,"rs":y}\n     │
+ *   │    /charge_cmd (std_msgs/String) → UART TX  {"charge":1}\n        │
+ *   └────────────────────────────────────────────────────────────────────┘
  *
- * 設計理念：
- *   - 此節點「不理解」JSON 內容的語義，它只是一個透明的 Serial ↔ Topic 橋接器
- *   - 所有運動學邏輯由 kinematics_node 處理
- *   - Serial 使用 POSIX termios 非阻塞式 I/O，避免阻塞 ROS callback
+ * 設計決策：
+ *   1. 使用獨立 std::thread 做 Serial 阻塞式讀取，絕對不會卡死 rclcpp::spin()
+ *   2. 讀到完整 JSON 行後，根據 Key 值分發到對應的內部 Topic
+ *   3. 節點關閉時自動送出停車命令 {"ls":0,"rs":0}
+ *   4. Serial 使用 POSIX termios raw mode，8N1 (Jetson 側)
  *
  * 編譯依賴：rclcpp, std_msgs
  */
@@ -22,53 +35,84 @@
 #include <termios.h>
 #include <unistd.h>
 #include <errno.h>
+#include <poll.h>
+
 #include <cstring>
 #include <string>
 #include <mutex>
+#include <thread>
+#include <atomic>
 
 class SerialBridgeNode : public rclcpp::Node
 {
 public:
     SerialBridgeNode()
-        : Node("serial_bridge_node"), serial_fd_(-1)
+        : Node("serial_bridge_node"), serial_fd_(-1), running_(false)
     {
-        // ---------- 宣告參數 ----------
+        // =====================================================================
+        //  參數宣告
+        // =====================================================================
         this->declare_parameter<std::string>("usb_port", "/dev/ttyACM0");
         this->declare_parameter<int>("baudrate", 115200);
-        this->declare_parameter<int>("serial_read_hz", 50);
 
-        const auto port = this->get_parameter("usb_port").as_string();
+        const auto port     = this->get_parameter("usb_port").as_string();
         const auto baudrate = this->get_parameter("baudrate").as_int();
-        const auto read_hz = this->get_parameter("serial_read_hz").as_int();
 
-        // ---------- 初始化 Serial Port (POSIX termios) ----------
+        // =====================================================================
+        //  開啟 Serial Port (POSIX termios, 8N1)
+        // =====================================================================
         if (!open_serial(port, baudrate)) {
             RCLCPP_FATAL(this->get_logger(), "無法開啟 Serial Port: %s", port.c_str());
             throw std::runtime_error("Serial port open failed");
         }
-        RCLCPP_INFO(this->get_logger(), "成功連接底層控制板: %s @ %d baud", port.c_str(), static_cast<int>(baudrate));
+        RCLCPP_INFO(this->get_logger(),
+                     "成功連接 Arduino: %s @ %d baud", port.c_str(), static_cast<int>(baudrate));
 
-        // ---------- Publisher: Serial RX → ROS Topic ----------
-        pub_serial_rx_ = this->create_publisher<std_msgs::msg::String>("serial_rx", 10);
+        // =====================================================================
+        //  Publishers — 依據 Arduino 推播的 JSON Key 分流
+        // =====================================================================
+        // 里程計 (20Hz): {"p1":x,"p2":y}
+        pub_raw_odom_      = this->create_publisher<std_msgs::msg::String>("raw_odom", 30);
+        // 電池電量 (1Hz): {"pow":24.5}
+        pub_battery_state_ = this->create_publisher<std_msgs::msg::String>("battery_state", 10);
+        // 充電站狀態 (10Hz): {"can_v":x,"can_w":y,"c_st":0}
+        pub_charge_status_ = this->create_publisher<std_msgs::msg::String>("charge_status", 10);
+        // 其他未分類訊息 (系統訊息、debug 等)
+        pub_serial_rx_     = this->create_publisher<std_msgs::msg::String>("serial_rx", 10);
 
-        // ---------- Subscriber: ROS Topic → Serial TX ----------
-        sub_serial_tx_ = this->create_subscription<std_msgs::msg::String>(
-            "serial_tx", 10,
-            std::bind(&SerialBridgeNode::serial_tx_callback, this, std::placeholders::_1));
+        // =====================================================================
+        //  Subscribers — ROS → Arduino
+        // =====================================================================
+        // 馬達速度命令: {"ls":RPM,"rs":RPM}
+        sub_motor_cmd_ = this->create_subscription<std_msgs::msg::String>(
+            "motor_cmd", 10,
+            std::bind(&SerialBridgeNode::motor_cmd_callback, this, std::placeholders::_1));
 
-        // ---------- Timer: 定時讀取 Serial Port ----------
-        const auto period_ms = std::chrono::milliseconds(1000 / read_hz);
-        read_timer_ = this->create_wall_timer(
-            period_ms, std::bind(&SerialBridgeNode::read_serial_callback, this));
+        // 充電控制命令: {"charge":1} 或 {"charge":0}
+        sub_charge_cmd_ = this->create_subscription<std_msgs::msg::String>(
+            "charge_cmd", 10,
+            std::bind(&SerialBridgeNode::charge_cmd_callback, this, std::placeholders::_1));
 
-        RCLCPP_INFO(this->get_logger(), "Serial Bridge 啟動完成 (read_hz=%d)", static_cast<int>(read_hz));
+        // =====================================================================
+        //  啟動獨立的 Serial Reader Thread
+        // =====================================================================
+        running_ = true;
+        reader_thread_ = std::thread(&SerialBridgeNode::reader_thread_func, this);
+
+        RCLCPP_INFO(this->get_logger(), "Serial Bridge 啟動完成 (Reader Thread 已啟動)");
     }
 
     ~SerialBridgeNode() override
     {
+        // 通知 reader thread 結束
+        running_ = false;
+        if (reader_thread_.joinable()) {
+            reader_thread_.join();
+        }
+
         // 安全停車：關閉前送出零速命令
         if (serial_fd_ >= 0) {
-            const std::string stop_cmd = "{\"m\":0,\"ls\":0,\"rs\":0}\n";
+            const std::string stop_cmd = "{\"ls\":0,\"rs\":0}\n";
             write_serial(stop_cmd);
             RCLCPP_INFO(this->get_logger(), "送出停車命令，關閉 Serial Port");
             ::close(serial_fd_);
@@ -78,20 +122,21 @@ public:
 
 private:
     // =========================================================================
-    //  Serial Port 操作 (POSIX termios, 非阻塞)
+    //  Serial Port 操作 (POSIX termios)
     // =========================================================================
 
     /**
-     * @brief 以非阻塞模式開啟 Serial Port
-     * @param port  裝置路徑，例如 "/dev/ttyUSB0"
-     * @param baudrate  鮑率，僅支援常見值 (9600, 115200, ...)
-     * @return true 成功
+     * @brief 開啟 Serial Port (阻塞模式，供 reader thread 使用 poll + read)
      */
     bool open_serial(const std::string &port, int baudrate)
     {
-        serial_fd_ = ::open(port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+        // O_RDWR: 讀寫模式
+        // O_NOCTTY: 不要成為控制終端
+        // 注意：不使用 O_NONBLOCK，reader thread 使用 poll() 做超時控制
+        serial_fd_ = ::open(port.c_str(), O_RDWR | O_NOCTTY);
         if (serial_fd_ < 0) {
-            RCLCPP_ERROR(this->get_logger(), "open() 失敗: %s (%s)", port.c_str(), strerror(errno));
+            RCLCPP_ERROR(this->get_logger(), "open() 失敗: %s (%s)",
+                         port.c_str(), strerror(errno));
             return false;
         }
 
@@ -103,28 +148,30 @@ private:
             return false;
         }
 
-        // ---------- 鮑率 ----------
+        // --- 鮑率 ---
         speed_t baud_flag = baud_to_flag(baudrate);
         cfsetispeed(&tty, baud_flag);
         cfsetospeed(&tty, baud_flag);
 
-        // ---------- 8N1, 無流控 ----------
-        tty.c_cflag &= ~PARENB;        // 無同位元
-        tty.c_cflag &= ~CSTOPB;        // 1 stop bit
+        // --- 8N1, 無流控 (Jetson 側是 8N1, Arduino 側 RS485 才是 8E1) ---
+        tty.c_cflag &= ~PARENB;         // 無同位元
+        tty.c_cflag &= ~CSTOPB;         // 1 stop bit
         tty.c_cflag &= ~CSIZE;
-        tty.c_cflag |= CS8;            // 8 data bits
-        tty.c_cflag &= ~CRTSCTS;       // 無硬體流控
-        tty.c_cflag |= CREAD | CLOCAL; // 啟用接收，忽略 modem 控制
+        tty.c_cflag |= CS8;             // 8 data bits
+        tty.c_cflag &= ~CRTSCTS;        // 無硬體流控
+        tty.c_cflag |= CREAD | CLOCAL;  // 啟用接收，忽略 modem 控制
 
-        // ---------- Raw mode ----------
+        // --- Raw mode ---
         tty.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
         tty.c_iflag &= ~(IXON | IXOFF | IXANY);
         tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
         tty.c_oflag &= ~OPOST;
 
-        // ---------- 非阻塞讀取 ----------
-        tty.c_cc[VMIN] = 0;   // 不等待最少字元數
-        tty.c_cc[VTIME] = 0;  // 立即返回
+        // --- 阻塞式讀取 (VMIN=1, VTIME=1) ---
+        // VMIN=1: 至少收到 1 Byte 才回傳
+        // VTIME=1: 但最多等 100ms (0.1s) 就回傳，方便 thread 檢查 running_ flag
+        tty.c_cc[VMIN]  = 1;
+        tty.c_cc[VTIME] = 1;
 
         if (tcsetattr(serial_fd_, TCSANOW, &tty) != 0) {
             RCLCPP_ERROR(this->get_logger(), "tcsetattr() 失敗: %s", strerror(errno));
@@ -133,7 +180,7 @@ private:
             return false;
         }
 
-        tcflush(serial_fd_, TCIOFLUSH); // 清除輸入/輸出緩衝
+        tcflush(serial_fd_, TCIOFLUSH);
         return true;
     }
 
@@ -156,11 +203,11 @@ private:
     }
 
     /**
-     * @brief 非阻塞寫入 Serial Port
+     * @brief Thread-safe 寫入 Serial Port
      */
     void write_serial(const std::string &data)
     {
-        std::lock_guard<std::mutex> lock(serial_mutex_);
+        std::lock_guard<std::mutex> lock(write_mutex_);
         if (serial_fd_ < 0) return;
 
         ssize_t total = 0;
@@ -169,7 +216,6 @@ private:
             ssize_t n = ::write(serial_fd_, data.c_str() + total, len - total);
             if (n < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // 暫時無法寫入，稍後重試
                     usleep(100);
                     continue;
                 }
@@ -178,83 +224,165 @@ private:
             }
             total += n;
         }
-        // tcdrain 確保資料送出
         tcdrain(serial_fd_);
     }
 
     // =========================================================================
-    //  ROS Callbacks
+    //  獨立 Serial Reader Thread
     // =========================================================================
 
     /**
-     * @brief 收到 serial_tx topic 訊息 → 寫入 Serial Port
-     *        訊息內容直接是一個完整的 JSON 字串（不含 '\n'），本節點自動加上換行
+     * @brief 在獨立 thread 中執行，持續讀取 Serial Port
+     *
+     * 使用 poll() 做超時控制：
+     *   - 有數據時立刻讀取，達到最低延遲
+     *   - 無數據時每 100ms 醒來一次，檢查 running_ flag
+     *   - 讀到 '\n' 就觸發 dispatch_json_line()
      */
-    void serial_tx_callback(const std_msgs::msg::String::SharedPtr msg)
+    void reader_thread_func()
     {
-        std::string data = msg->data;
-        if (data.empty()) return;
+        RCLCPP_INFO(this->get_logger(), "[Reader Thread] 已啟動");
 
-        // 確保以換行結尾（Arduino 以 '\n' 作為封包界定符）
-        if (data.back() != '\n') {
-            data.push_back('\n');
+        std::string line_buffer;
+        line_buffer.reserve(256);
+
+        struct pollfd pfd;
+        pfd.fd = serial_fd_;
+        pfd.events = POLLIN;
+
+        while (running_.load()) {
+            // poll() 最多等 100ms
+            int ret = poll(&pfd, 1, 100);
+            if (ret < 0) {
+                if (errno == EINTR) continue;
+                RCLCPP_ERROR(this->get_logger(), "[Reader Thread] poll() 錯誤: %s",
+                             strerror(errno));
+                break;
+            }
+            if (ret == 0) continue;  // 超時，重新檢查 running_
+
+            // 有數據可讀
+            char buf[512];
+            ssize_t n = ::read(serial_fd_, buf, sizeof(buf) - 1);
+            if (n <= 0) {
+                if (n == 0) continue;  // EOF
+                if (errno == EAGAIN || errno == EINTR) continue;
+                RCLCPP_ERROR(this->get_logger(), "[Reader Thread] read() 錯誤: %s",
+                             strerror(errno));
+                break;
+            }
+
+            // 逐字元累積，遇到 '\n' 就分派
+            for (ssize_t i = 0; i < n; ++i) {
+                char c = buf[i];
+                if (c == '\n') {
+                    // 去除可能的 '\r'
+                    if (!line_buffer.empty() && line_buffer.back() == '\r') {
+                        line_buffer.pop_back();
+                    }
+                    if (!line_buffer.empty()) {
+                        dispatch_json_line(line_buffer);
+                    }
+                    line_buffer.clear();
+                } else {
+                    line_buffer.push_back(c);
+                    // 防止記憶體爆炸
+                    if (line_buffer.size() > 1024) {
+                        RCLCPP_WARN(this->get_logger(),
+                                    "[Reader Thread] 行緩衝超過 1KB，清除");
+                        line_buffer.clear();
+                    }
+                }
+            }
         }
 
-        write_serial(data);
-        RCLCPP_DEBUG(this->get_logger(), "TX → %s", msg->data.c_str());
+        RCLCPP_INFO(this->get_logger(), "[Reader Thread] 已結束");
     }
 
     /**
-     * @brief 定時從 Serial Port 非阻塞讀取，遇到 '\n' 就將該行發布至 serial_rx
+     * @brief 根據 JSON 中的 Key 值，分發到對應的 ROS Topic
+     *
+     * 分流規則：
+     *   - 包含 "p1" → /raw_odom      (里程計)
+     *   - 包含 "pow" → /battery_state (電池電量)
+     *   - 包含 "can_v" → /charge_status (充電站狀態)
+     *   - 其他 → /serial_rx           (系統訊息等)
+     *
+     * 注意：這裡只做「字串子串匹配」，不做完整 JSON 解析。
+     * 因為本節點是透明橋接器，完整解析由下游 kinematics_node 負責。
+     * 使用 find() 而非 JSON parser 的原因是極致低延遲（避免額外 CPU 負擔）。
      */
-    void read_serial_callback()
+    void dispatch_json_line(const std::string &line)
     {
-        std::lock_guard<std::mutex> lock(serial_mutex_);
-        if (serial_fd_ < 0) return;
+        auto msg = std_msgs::msg::String();
+        msg.data = line;
 
-        char buf[512];
-        ssize_t n = ::read(serial_fd_, buf, sizeof(buf) - 1);
-        if (n <= 0) return;
-
-        // 將讀到的資料附加到內部緩衝
-        rx_buffer_.append(buf, static_cast<size_t>(n));
-
-        // 逐行切割，每遇到 '\n' 就發布一則訊息
-        std::string::size_type pos;
-        while ((pos = rx_buffer_.find('\n')) != std::string::npos) {
-            std::string line = rx_buffer_.substr(0, pos);
-            rx_buffer_.erase(0, pos + 1);
-
-            if (line.empty()) continue;
-            // 去除可能的 '\r'
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
-            if (line.empty()) continue;
-
-            auto out_msg = std_msgs::msg::String();
-            out_msg.data = line;
-            pub_serial_rx_->publish(out_msg);
-            RCLCPP_DEBUG(this->get_logger(), "RX ← %s", line.c_str());
+        if (line.find("\"p1\"") != std::string::npos) {
+            // 里程計封包: {"p1":xxx,"p2":xxx}
+            pub_raw_odom_->publish(msg);
         }
-
-        // 防止因 Arduino 無換行導致的緩衝溢出
-        if (rx_buffer_.size() > 4096) {
-            RCLCPP_WARN(this->get_logger(), "RX 緩衝超過 4KB，清除");
-            rx_buffer_.clear();
+        else if (line.find("\"pow\"") != std::string::npos) {
+            // 電池電量封包: {"pow":24.5}
+            pub_battery_state_->publish(msg);
         }
+        else if (line.find("\"can_v\"") != std::string::npos) {
+            // 充電站狀態封包: {"can_v":0.00,"can_w":0.00,"c_st":0}
+            pub_charge_status_->publish(msg);
+        }
+        else {
+            // 系統訊息 / 未分類: {"sys":"AMR_READY..."} etc.
+            pub_serial_rx_->publish(msg);
+            RCLCPP_INFO(this->get_logger(), "Arduino 系統訊息: %s", line.c_str());
+        }
+    }
+
+    // =========================================================================
+    //  ROS Subscriber Callbacks
+    // =========================================================================
+
+    /**
+     * @brief 收到 /motor_cmd → 寫入 Arduino
+     *        訊息內容是完整 JSON 字串，本節點自動加上 '\n'
+     */
+    void motor_cmd_callback(const std_msgs::msg::String::SharedPtr msg)
+    {
+        std::string data = msg->data;
+        if (data.empty()) return;
+        if (data.back() != '\n') data.push_back('\n');
+        write_serial(data);
+        RCLCPP_DEBUG(this->get_logger(), "TX motor_cmd → %s", msg->data.c_str());
+    }
+
+    /**
+     * @brief 收到 /charge_cmd → 寫入 Arduino
+     *        預期格式: {"charge":1} 或 {"charge":0}
+     */
+    void charge_cmd_callback(const std_msgs::msg::String::SharedPtr msg)
+    {
+        std::string data = msg->data;
+        if (data.empty()) return;
+        if (data.back() != '\n') data.push_back('\n');
+        write_serial(data);
+        RCLCPP_INFO(this->get_logger(), "TX charge_cmd → %s", msg->data.c_str());
     }
 
     // =========================================================================
     //  成員變數
     // =========================================================================
     int serial_fd_;
-    std::mutex serial_mutex_;
-    std::string rx_buffer_;
+    std::mutex write_mutex_;        // 僅保護 write，read 由獨立 thread 獨佔
+    std::atomic<bool> running_;
+    std::thread reader_thread_;
 
+    // Publishers (分流輸出)
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_raw_odom_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_battery_state_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_charge_status_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_serial_rx_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_serial_tx_;
-    rclcpp::TimerBase::SharedPtr read_timer_;
+
+    // Subscribers (接收指令)
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_motor_cmd_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_charge_cmd_;
 };
 
 // =============================================================================

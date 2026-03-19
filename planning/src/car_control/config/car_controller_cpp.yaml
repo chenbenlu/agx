@@ -2,27 +2,44 @@
 #  car_control C++ 節點參數配置
 #  用於 serial_bridge_node + kinematics_node 架構
 #
+#  Arduino 韌體: ros2_com.ino (整合充電與電量)
+#  通訊協定:
+#    Arduino → Jetson (推播):
+#      20Hz: {"p1":<左輪ticks>,"p2":<右輪ticks>}
+#       1Hz: {"pow":<電壓>}
+#      10Hz: {"can_v":<線速>,"can_w":<角速>,"c_st":<0或1>}
+#    Jetson → Arduino (指令):
+#      {"ls":<左輪RPM>,"rs":<右輪RPM>}
+#      {"charge":1} 或 {"charge":0}
+#
 #  啟動方式：
 #    ros2 launch car_control car_sensor_cpp.launch.py
 # =============================================================================
 
 # ----- Serial Bridge Node -----
+# 職責：獨佔 Serial Port，獨立 Thread 讀取，依 JSON Key 分流發布
 serial_bridge_node:
   ros__parameters:
-    usb_port: '/dev/ttyACM0'       # Arduino Serial 裝置路徑
-    baudrate: 115200               # 鮑率（需與 Arduino Serial.begin() 一致）
-    serial_read_hz: 100            # Serial 讀取頻率 (Hz)。Arduino 20Hz push，100Hz 讀取確保低延遲
+    usb_port: '/dev/ttyACM0'       # Arduino USB Serial 裝置路徑
+    baudrate: 115200               # 鮑率（Jetson 側 8N1，Arduino 側 RS485 是 8E1）
 
 # ----- Kinematics Node -----
+# 職責：cmd_vel→輪速、encoder→Odom/TF、電量/充電站狀態轉發
 kinematics_node:
   ros__parameters:
-    # 車體參數
+    # --- 車體參數 ---
     car_distance: 0.65             # 輪距：左右輪中心距離 (m)
     car_mode: 'diff'               # 運動模式：'diff' (差速)
     Tire_diameter: 0.18            # 車輪直徑 (m)
-    # 馬達 / 編碼器參數
+
+    # --- 馬達 / 編碼器參數 ---
     encoder_resolution: 720        # 編碼器每圈脈衝數
     gear_ratio: 1.0                # 減速比（馬達端:輪端）
-    # Odom / ROS 參數
-    odom_up_hz: 10                 # Odometry 更新頻率 (Hz)，開迴路模式使用
-    use_encoder_feedback: true     # Arduino Push 架構：收到 {"p1":x,"p2":y} 即觸發
+
+    # --- Odom / TF Frame ---
+    odom_frame: 'odom'             # TF 父 frame
+    base_frame: 'base_link'        # TF 子 frame
+
+    # --- Odom 更新模式 ---
+    odom_up_hz: 10                 # 開迴路模式 Odom 更新頻率 (Hz)
+    use_encoder_feedback: true     # true=閉迴路 (Arduino Push), false=開迴路 (cmd_vel 積分)

@@ -43,7 +43,7 @@ endif()
 # --- serial_bridge_node ---
 # 職責：獨佔 Serial Port，使用獨立 Reader Thread 做非阻塞讀取，
 #       根據 JSON Key 分流發布到 /raw_odom, /battery_state, /charge_status
-add_executable(serial_bridge_node scripts/serial_bridge_node.cpp)
+add_executable(serial_bridge_node src/serial_bridge_node.cpp)
 ament_target_dependencies(serial_bridge_node
   rclcpp
   std_msgs
@@ -51,7 +51,7 @@ ament_target_dependencies(serial_bridge_node
 
 # --- kinematics_node ---
 # 職責：cmd_vel→輪速、encoder→Odom/TF、電量/充電站狀態轉發
-add_executable(kinematics_node scripts/kinematics_node.cpp)
+add_executable(kinematics_node src/kinematics_node.cpp)
 ament_target_dependencies(kinematics_node
   rclcpp
   std_msgs

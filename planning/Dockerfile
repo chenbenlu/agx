@@ -56,6 +56,7 @@ RUN apt-get update && \
     tmux \
     zenoh-bridge-ros2dds \
     nlohmann-json3-dev \
+    python3-vcstool \
     && rm -rf /var/lib/apt/lists/*
 
 # =======================================================
@@ -67,12 +68,14 @@ RUN pip3 install --no-cache-dir \
     "numpy<1.24.0"
 
 # =======================================================
-# 5. 外部依賴源碼安裝 (urg_node2)
+# 5. 外部依賴源碼安裝 (使用 vcstool)
 # =======================================================
-WORKDIR ${WORKSPACE}/src
-RUN git clone --recursive https://github.com/Hokuyo-aut/urg_node2.git
-
 WORKDIR ${WORKSPACE}
+COPY dependencies.repos .
+RUN mkdir -p src && \
+    vcs import src < dependencies.repos && \
+    vcs custom src --args submodule update --init --recursive
+
 RUN apt-get update && \
     rosdep update && \
     rosdep install -i --from-paths src -y --ignore-src

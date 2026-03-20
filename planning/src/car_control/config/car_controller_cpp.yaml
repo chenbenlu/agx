@@ -39,6 +39,7 @@ kinematics_node:
     # --- Odom / TF Frame ---
     odom_frame: 'odom'             # TF 父 frame
     base_frame: 'base_link'        # TF 子 frame
+    base_footprint_frame: 'base_footprint' # TF 地面投影 frame
 
     # --- Odom 更新模式 ---
     odom_up_hz: 10                 # 開迴路模式 Odom 更新頻率 (Hz)

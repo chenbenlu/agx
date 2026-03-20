@@ -26,18 +26,9 @@ elif [ "$ARCH" = "x86_64" ]; then
     fi
 fi
 ```
-### Lidar啟動測試
+### Sensor Bringup (底盤控制 + 雷達)
 ```bash
-ros2 launch urg_node2 urg_node2.launch.py
-```
-
-<!-- ### SLAM bringup
-```bash
-ros2 launch car_control slam_bringup.launch.py
-``` -->
-### car sensor bringup
-``` bash
-ros2 launch car_control car_sensor_cpp.launch.py
+ros2 launch car_control car_sensor.launch.py
 ```
 ### keyboard control
 ```bash

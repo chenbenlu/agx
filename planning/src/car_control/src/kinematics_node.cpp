@@ -66,6 +66,7 @@ public:
         this->declare_parameter<bool>("use_encoder_feedback", true);
         this->declare_parameter<std::string>("odom_frame", "odom");
         this->declare_parameter<std::string>("base_frame", "base_link");
+        this->declare_parameter<std::string>("base_footprint_frame", "base_footprint");
 
         car_distance_        = this->get_parameter("car_distance").as_double();
         car_mode_            = this->get_parameter("car_mode").as_string();
@@ -76,6 +77,7 @@ public:
         use_encoder_feedback_= this->get_parameter("use_encoder_feedback").as_bool();
         odom_frame_          = this->get_parameter("odom_frame").as_string();
         base_frame_          = this->get_parameter("base_frame").as_string();
+        base_footprint_frame_= this->get_parameter("base_footprint_frame").as_string();
 
         // =====================================================================
         //  衍生常數計算
@@ -95,6 +97,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "distance_per_pulse = %.6f m", distance_per_pulse_);
         RCLCPP_INFO(this->get_logger(), "odom_frame         = %s", odom_frame_.c_str());
         RCLCPP_INFO(this->get_logger(), "base_frame         = %s", base_frame_.c_str());
+        RCLCPP_INFO(this->get_logger(), "base_footprint     = %s", base_footprint_frame_.c_str());
         RCLCPP_INFO(this->get_logger(), "use_encoder_feedback = %s",
                      use_encoder_feedback_ ? "true" : "false");
         RCLCPP_INFO(this->get_logger(), "=================================");
@@ -117,7 +120,7 @@ public:
         pub_motor_cmd_      = this->create_publisher<std_msgs::msg::String>("motor_cmd", 10);
         // Odometry
         pub_odom_           = this->create_publisher<nav_msgs::msg::Odometry>("odom", 30);
-        // TF broadcaster (odom → base_link)
+        // TF broadcaster
         tf_broadcaster_     = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         // 電池電壓 (解析後的浮點數)
         pub_battery_voltage_= this->create_publisher<std_msgs::msg::Float32>("battery_voltage", 10);
@@ -367,7 +370,7 @@ private:
     }
 
     /**
-     * @brief 發布 /odom 訊息與 TF (odom → base_link)
+     * @brief 發布 /odom 訊息與 TF (odom → base_footprint) 以及 (base_footprint → base_link)
      */
     void publish_odom_and_tf(const rclcpp::Time &stamp,
                              double vx, double vy, double wz)
@@ -376,25 +379,39 @@ private:
         tf2::Quaternion q;
         q.setRPY(0.0, 0.0, theta_);
 
-        // --- TF: odom → base_link ---
-        geometry_msgs::msg::TransformStamped tf;
-        tf.header.stamp    = stamp;
-        tf.header.frame_id = odom_frame_;
-        tf.child_frame_id  = base_frame_;
-        tf.transform.translation.x = x_;
-        tf.transform.translation.y = y_;
-        tf.transform.translation.z = 0.0;
-        tf.transform.rotation.x = q.x();
-        tf.transform.rotation.y = q.y();
-        tf.transform.rotation.z = q.z();
-        tf.transform.rotation.w = q.w();
-        tf_broadcaster_->sendTransform(tf);
+        // --- TF: odom → base_footprint ---
+        geometry_msgs::msg::TransformStamped tf_odom_bf;
+        tf_odom_bf.header.stamp    = stamp;
+        tf_odom_bf.header.frame_id = odom_frame_;
+        tf_odom_bf.child_frame_id  = base_footprint_frame_;
+        tf_odom_bf.transform.translation.x = x_;
+        tf_odom_bf.transform.translation.y = y_;
+        tf_odom_bf.transform.translation.z = 0.0;
+        tf_odom_bf.transform.rotation.x = q.x();
+        tf_odom_bf.transform.rotation.y = q.y();
+        tf_odom_bf.transform.rotation.z = q.z();
+        tf_odom_bf.transform.rotation.w = q.w();
+        tf_broadcaster_->sendTransform(tf_odom_bf);
+
+        // --- TF: base_footprint → base_link ---
+        geometry_msgs::msg::TransformStamped tf_bf_bl;
+        tf_bf_bl.header.stamp    = stamp;
+        tf_bf_bl.header.frame_id = base_footprint_frame_;
+        tf_bf_bl.child_frame_id  = base_frame_;
+        tf_bf_bl.transform.translation.x = 0.0;
+        tf_bf_bl.transform.translation.y = 0.0;
+        tf_bf_bl.transform.translation.z = 0.0;
+        tf_bf_bl.transform.rotation.x = 0.0;
+        tf_bf_bl.transform.rotation.y = 0.0;
+        tf_bf_bl.transform.rotation.z = 0.0;
+        tf_bf_bl.transform.rotation.w = 1.0;
+        tf_broadcaster_->sendTransform(tf_bf_bl);
 
         // --- Odometry ---
         nav_msgs::msg::Odometry odom;
         odom.header.stamp    = stamp;
         odom.header.frame_id = odom_frame_;
-        odom.child_frame_id  = base_frame_;
+        odom.child_frame_id  = base_footprint_frame_;
 
         odom.pose.pose.position.x = x_;
         odom.pose.pose.position.y = y_;
@@ -425,6 +442,7 @@ private:
     bool use_encoder_feedback_;  // true=閉迴路 (Arduino Push), false=開迴路
     std::string odom_frame_;     // TF 父 frame
     std::string base_frame_;     // TF 子 frame
+    std::string base_footprint_frame_; // TF 地面投影 frame
 
     double tire_circumference_;  // π × D
     double tire_radius_;         // D / 2

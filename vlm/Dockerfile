@@ -5,10 +5,6 @@ FROM nvcr.io/nvidia/isaac/ros:aarch64-ros2_humble_4c0c55dddd2bbcc3e8d5f9753bee63
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 加入 Yarn GPG key 和 repository
-RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor -o /usr/share/keyrings/yarn.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/yarn.gpg] https://dl.yarnpkg.com/debian stable main" > /etc/apt/sources.list.d/yarn.list
-
 # 2. 安裝基礎工具與 RealSense 驅動
 RUN apt-get update && apt-get install -y \
     python3-pip \

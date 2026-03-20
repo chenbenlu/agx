@@ -2,7 +2,7 @@ services:
   # =========================================
   # 資料視覺化 (Foxglove)
   # =========================================
-  visualization:
+  foxglove:
     build:
       context: ./
       dockerfile: Dockerfile

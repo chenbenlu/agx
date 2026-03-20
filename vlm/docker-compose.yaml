@@ -2,7 +2,7 @@ services:
   # =========================================
   # Isaac ROS 視覺加速服務
   # =========================================
-  isaac_ros:
+  vlm:
     build:
       context: ./
       dockerfile: Dockerfile

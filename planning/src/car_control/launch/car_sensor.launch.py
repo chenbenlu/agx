@@ -41,6 +41,7 @@ from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import ChangeState
 from lifecycle_msgs.msg import Transition
 from ament_index_python.packages import get_package_share_directory
+import xacro
 
 
 def generate_launch_description():
@@ -62,6 +63,17 @@ def generate_launch_description():
         'config',
         'urg_node2_override.yaml',
     )
+
+    # URDF XACRO 檔案路徑
+    xacro_file = os.path.join(
+        get_package_share_directory('car_control'),
+        'urdf',
+        'amr_core.urdf.xacro'
+    )
+    
+    # 讀取 xacro 並轉譯成純 URDF xml 字串
+    doc = xacro.process_file(xacro_file)
+    robot_description = {'robot_description': doc.toxml()}
 
     # 讀取 YAML 並取得 ros__parameters dict
     with open(urg_override_config, 'r') as f:
@@ -145,19 +157,16 @@ def generate_launch_description():
     )
 
     # ==========================================================
-    #  Static TF: base_link → laser
+    #  Robot State Publisher (處理 URDF 靜態轉換)
     # ==========================================================
-    base_to_laser_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='base_to_laser_broadcaster',
-        arguments=[
-            '--x', '0.41', '--y', '0.0', '--z', '0.20',
-            '--yaw', '0.0', '--pitch', '0.0', '--roll', '0.0',
-            '--frame-id', 'base_link', '--child-frame-id', 'laser',
-        ],
+    rsp_node = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
         output='screen',
+        parameters=[robot_description, {'use_sim_time': False}]
     )
+
 
     # ==========================================================
     #  組合啟動
@@ -175,6 +184,7 @@ def generate_launch_description():
         serial_bridge_node,
         kinematics_node,
 
-        # Static TF
-        base_to_laser_tf,
+        # URDF / TF (所有靜態座標樹由 robot_state_publisher 統一發布)
+        rsp_node,
     ])
+

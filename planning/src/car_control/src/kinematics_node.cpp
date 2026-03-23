@@ -119,9 +119,7 @@ public:
         // 馬達速度 JSON → serial_bridge_node
         pub_motor_cmd_      = this->create_publisher<std_msgs::msg::String>("motor_cmd", 10);
         // Odometry
-        pub_odom_           = this->create_publisher<nav_msgs::msg::Odometry>("odom", 30);
-        // TF broadcaster
-        tf_broadcaster_     = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+        pub_odom_           = this->create_publisher<nav_msgs::msg::Odometry>("raw_odom", 30);
         // 電池電壓 (解析後的浮點數)
         pub_battery_voltage_= this->create_publisher<std_msgs::msg::Float32>("battery_voltage", 10);
         // 充電站狀態 (解析後的結構化 JSON 字串，供上層決策用)
@@ -370,7 +368,7 @@ private:
     }
 
     /**
-     * @brief 發布 /odom 訊息與 TF (odom → base_footprint) 以及 (base_footprint → base_link)
+     * @brief 發布 /raw_odom 訊息
      */
     void publish_odom_and_tf(const rclcpp::Time &stamp,
                              double vx, double vy, double wz)
@@ -378,34 +376,6 @@ private:
         // --- 四元數 ---
         tf2::Quaternion q;
         q.setRPY(0.0, 0.0, theta_);
-
-        // --- TF: odom → base_footprint ---
-        geometry_msgs::msg::TransformStamped tf_odom_bf;
-        tf_odom_bf.header.stamp    = stamp;
-        tf_odom_bf.header.frame_id = odom_frame_;
-        tf_odom_bf.child_frame_id  = base_footprint_frame_;
-        tf_odom_bf.transform.translation.x = x_;
-        tf_odom_bf.transform.translation.y = y_;
-        tf_odom_bf.transform.translation.z = 0.0;
-        tf_odom_bf.transform.rotation.x = q.x();
-        tf_odom_bf.transform.rotation.y = q.y();
-        tf_odom_bf.transform.rotation.z = q.z();
-        tf_odom_bf.transform.rotation.w = q.w();
-        tf_broadcaster_->sendTransform(tf_odom_bf);
-
-        // --- TF: base_footprint → base_link ---
-        geometry_msgs::msg::TransformStamped tf_bf_bl;
-        tf_bf_bl.header.stamp    = stamp;
-        tf_bf_bl.header.frame_id = base_footprint_frame_;
-        tf_bf_bl.child_frame_id  = base_frame_;
-        tf_bf_bl.transform.translation.x = 0.0;
-        tf_bf_bl.transform.translation.y = 0.0;
-        tf_bf_bl.transform.translation.z = 0.0;
-        tf_bf_bl.transform.rotation.x = 0.0;
-        tf_bf_bl.transform.rotation.y = 0.0;
-        tf_bf_bl.transform.rotation.z = 0.0;
-        tf_bf_bl.transform.rotation.w = 1.0;
-        tf_broadcaster_->sendTransform(tf_bf_bl);
 
         // --- Odometry ---
         nav_msgs::msg::Odometry odom;
@@ -463,7 +433,6 @@ private:
     // --- ROS Publishers ---
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_motor_cmd_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;
-    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr pub_battery_voltage_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_charging_state_;
 

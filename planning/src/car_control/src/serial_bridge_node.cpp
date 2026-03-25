@@ -9,7 +9,7 @@
  *   │  [獨立 Reader Thread]                                              │
  *   │    │  POSIX read() + 行累積                                        │
  *   │    │  ↓ 逐行 JSON 解析                                             │
- *   │    ├─ {"p1":x,"p2":y}       → /raw_odom       (std_msgs/String)   │
+ *   │    ├─ {"p1":x,"p2":y}       → /raw_encoder_json       (std_msgs/String)   │
  *   │    ├─ {"pow":x}             → /battery_state   (std_msgs/String)   │
  *   │    ├─ {"can_v":x,...}       → /charge_status   (std_msgs/String)   │
  *   │    └─ 其他                  → /serial_rx        (std_msgs/String)   │
@@ -72,7 +72,7 @@ public:
         //  Publishers — 依據 Arduino 推播的 JSON Key 分流
         // =====================================================================
         // 里程計 (20Hz): {"p1":x,"p2":y}
-        pub_raw_odom_      = this->create_publisher<std_msgs::msg::String>("raw_odom", 30);
+        pub_raw_odom_      = this->create_publisher<std_msgs::msg::String>("raw_encoder_json", 30);
         // 電池電量 (1Hz): {"pow":24.5}
         pub_battery_state_ = this->create_publisher<std_msgs::msg::String>("battery_state", 10);
         // 充電站狀態 (10Hz): {"can_v":x,"can_w":y,"c_st":0}
@@ -303,7 +303,7 @@ private:
      * @brief 根據 JSON 中的 Key 值，分發到對應的 ROS Topic
      *
      * 分流規則：
-     *   - 包含 "p1" → /raw_odom      (里程計)
+     *   - 包含 "p1" → /raw_encoder_json      (里程計 JSON)
      *   - 包含 "pow" → /battery_state (電池電量)
      *   - 包含 "can_v" → /charge_status (充電站狀態)
      *   - 其他 → /serial_rx           (系統訊息等)

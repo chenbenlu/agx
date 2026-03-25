@@ -16,9 +16,12 @@ Data Flow (下行)：
     /charge_cmd → [serial_bridge_node] → UART TX {"charge":1}
 
 Data Flow (上行)：
-    UART RX {"p1":x,"p2":y}          → [serial_bridge_node] → /raw_odom      → [kinematics_node] → /odom + TF
+    UART RX {"p1":x,"p2":y}          → [serial_bridge_node] → /raw_odom
     UART RX {"pow":24.5}             → [serial_bridge_node] → /battery_state  → [kinematics_node] → /battery_voltage
     UART RX {"can_v":x,"can_w":y...} → [serial_bridge_node] → /charge_status → [kinematics_node] → /charging_state
+
+狀態推估 (Sensor Fusion)：
+    /raw_odom + /camera/imu → [ekf_node] → /odometry/filtered + odom->base_footprint TF
 
 LiDAR：
     urg_node2 (LifecycleNode) → /scan (sensor_msgs/LaserScan)
@@ -55,6 +58,13 @@ def generate_launch_description():
         get_package_share_directory('car_control'),
         'config',
         'car_controller_cpp.yaml',
+    )
+
+    # EKF 參數檔
+    ekf_config = os.path.join(
+        get_package_share_directory('car_control'),
+        'config',
+        'ekf.yaml',
     )
 
     # urg_node2 覆寫參數 — 放在 car_control 內，第三方套件保持唯讀
@@ -157,6 +167,17 @@ def generate_launch_description():
     )
 
     # ==========================================================
+    #  EKF (Robot Localization)
+    # ==========================================================
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_filter_node',
+        output='screen',
+        parameters=[ekf_config],
+    )
+
+    # ==========================================================
     #  Robot State Publisher (處理 URDF 靜態轉換)
     # ==========================================================
     rsp_node = Node(
@@ -183,6 +204,9 @@ def generate_launch_description():
         # 車控節點
         serial_bridge_node,
         kinematics_node,
+
+        # EKF 濾波器 (融合里程計與 IMU)
+        ekf_node,
 
         # URDF / TF (所有靜態座標樹由 robot_state_publisher 統一發布)
         rsp_node,

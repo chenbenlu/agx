@@ -18,7 +18,7 @@ ekf_filter_node:
     odom0: /raw_odom
     odom0_config: [false,  false,  false,
                    false,  false,  false,
-                   true,   false,  false,    # 我們只信任底層回報的 X 軸向線性速度 (前後推力)
+                   true,   true,  false,    # 我們只信任底層回報的 X 軸向線性速度 (前後推力)
                    false,  false,  false,    # 忽略所有原始的 Yaw 與 角速度
                    false,  false,  false]
     odom0_queue_size: 10
@@ -29,7 +29,7 @@ ekf_filter_node:
     imu0_config: [false, false, false,
                   false, false, false,       
                   false, false, false,
-                  false, true, false,        # 我們極度信任 D455 提供給我們的 Yaw 角速度 (Z-axis Angular Velocity)
+                  false, false, true,        # 我們極度信任 D455 提供給我們的 Yaw 角速度 (Z-axis Angular Velocity)
                   false, false, false]
     imu0_queue_size: 10
     imu0_differential: false

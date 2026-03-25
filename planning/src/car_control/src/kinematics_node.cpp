@@ -8,7 +8,7 @@
  *   │                                                                          │
  *   │  [輸入]                                                                  │
  *   │    /cmd_vel  (Twist)          → 差速逆運動學 → /motor_cmd (JSON String)  │
- *   │    /raw_odom (String)         → 正運動學 → /odom + TF (odom→base_link)   │
+ *   │    /raw_encoder_json (String) → 正運動學 → /raw_odom + TF (odom→base_link)   │
  *   │    /battery_state (String)    → 解析電壓 → /battery_voltage (Float32)    │
  *   │    /charge_status (String)    → 解析狀態 → /charging_state (String)      │
  *   │                                                                          │
@@ -133,9 +133,9 @@ public:
             "cmd_vel", 10,
             std::bind(&KinematicsNode::cmd_vel_callback, this, std::placeholders::_1));
 
-        // /raw_odom ← serial_bridge_node (已分流的 encoder JSON)
+        // /raw_encoder_json ← serial_bridge_node (已分流的 encoder JSON)
         sub_raw_odom_ = this->create_subscription<std_msgs::msg::String>(
-            "raw_odom", 30,
+            "raw_encoder_json", 30,
             std::bind(&KinematicsNode::raw_odom_callback, this, std::placeholders::_1));
 
         // /battery_state ← serial_bridge_node (已分流的電量 JSON)
@@ -222,11 +222,11 @@ private:
     }
 
     // =========================================================================
-    //  /raw_odom → Encoder 解析 → Odom + TF (閉迴路)
+    //  /raw_encoder_json → Encoder 解析 → Odom + TF (閉迴路)
     // =========================================================================
 
     /**
-     * @brief /raw_odom 回呼
+     * @brief /raw_encoder_json 回呼
      *
      * 收到 serial_bridge_node 分流後的 encoder JSON: {"p1":xxx,"p2":xxx}
      * 「立刻」使用 now() 取得時間戳，然後計算正運動學

@@ -64,7 +64,8 @@ RUN apt-get update && \
 RUN pip3 install --no-cache-dir \
     "setuptools" \
     "pyserial" \
-    "numpy<1.24.0"
+    "numpy<1.24.0" \
+    "PyYAML"
 
 # =======================================================
 # 5. 外部依賴源碼安裝 (urg_node2)

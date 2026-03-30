@@ -8,6 +8,7 @@ services:
       - /home/systemlabagx/disk/agx/planning/src/car_control:/root/ros2_ws/src/car_control
       - /home/systemlabagx/disk/agx/planning/src/rl_navigator:/root/ros2_ws/src/rl_navigator
       - /home/systemlabagx/disk/agx/planning/src/models:/root/ros2_ws/src/models
+      - /home/systemlabagx/disk/agx/cosmos/VLA:/root/ros2_ws/src/vla_demo
       - /dev/bus/usb:/dev/bus/usb
     devices:
       - "/dev/ttyACM0:/dev/ttyACM0"

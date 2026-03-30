@@ -27,18 +27,20 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install -U jetson-stats
 
 # 4. 安裝額外 ROS 2 Humble 套件（基底已包含 ROS Humble）
-# RUN apt-get update && apt-get install -y \
-#     ros-humble-rmw-cyclonedds-cpp \
-#     ros-humble-cv-bridge \
-#     ros-humble-image-transport \
-#     && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-cv-bridge \
+    ros-humble-image-transport \
+    python3-opencv \
+    && rm -rf /var/lib/apt/lists/*
 
 # 5. 安裝額外的 Python 套件 (不要覆蓋基底映像檔的 numpy 和 opencv)
 RUN pip3 install --no-cache-dir \
     pillow \
     transformers \
-    timm \ 
-    accelerate
+    timm \
+    accelerate \
+    pyyaml
 
 # 安裝 CLIP (ftfy 和 regex 是相依套件)
 RUN pip3 install --no-cache-dir ftfy regex
@@ -52,6 +54,7 @@ WORKDIR /data
 
 # 8. 把 source setup.bash 寫入
 RUN echo "source /opt/ros/install/setup.bash" >> /root/.bashrc
+RUN echo "export PYTHONPATH=/opt/vla_demo:\$PYTHONPATH" >> /root/.bashrc
 
 # 9. 預設指令
 CMD ["bash", "-l"]

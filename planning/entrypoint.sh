@@ -23,7 +23,8 @@ fi
 # 2. 智慧編譯檢查 (Dev vs Prod)
 # -------------------------------------------------
 if [ -d "${WORKSPACE}/src" ]; then
-    if [ ! -f "${WORKSPACE}/install/setup.bash" ]; then
+    if [ ! -f "${WORKSPACE}/install/setup.bash" ] || \
+       { [ -f "${WORKSPACE}/src/vla_demo/package.xml" ] && [ ! -d "${WORKSPACE}/install/vla_demo" ]; }; then
         echo ">>> Workspace not built. Building now..."
         cd ${WORKSPACE}
         colcon build --symlink-install

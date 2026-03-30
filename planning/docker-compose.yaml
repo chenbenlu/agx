@@ -31,5 +31,6 @@ services:
       - ./src/car_control:/root/ros2_ws/src/car_control
       - ./src/rl_navigator:/root/ros2_ws/src/rl_navigator
       - ./src/models:/root/ros2_ws/src/models
+      - ../cosmos/VLA:/root/ros2_ws/src/vla_demo
     tty: true
     stdin_open: true

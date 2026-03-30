@@ -20,6 +20,7 @@ services:
       - ROS_DOMAIN_ID=0
       - ROS_HOSTNAME=localhost
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - PYTHONPATH=/opt/vla_demo
       - DISPLAY=${DISPLAY}
       - XAUTHORITY=/tmp/.docker.xauth
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
@@ -47,6 +48,7 @@ services:
       - /home/systemlabagx/disk/workspaces/data/nanollm_models:/data/models
       # 與 Isaac ROS 共用 workspace
       - /home/systemlabagx/disk/workspaces:/workspaces
+      - ../cosmos/VLA:/opt/vla_demo
     devices:
       - /dev/snd
       - /dev/bus/usb

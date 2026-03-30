@@ -8,7 +8,6 @@ services:
       dockerfile: Dockerfile
     image: agx_ros/planning:latest
     container_name: planning
-    privileged: true
 
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
@@ -17,10 +16,14 @@ services:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - DISPLAY=${DISPLAY}
       - XAUTHORITY=/tmp/.docker.xauth
-    devices:
-      - /dev/ttyUSB0:/dev/ttyUSB0
-      - /dev/ttyUSB1:/dev/ttyUSB1
-      - /dev/ttyACM0:/dev/ttyACM0
+    # Cgroup 設備白名單
+    device_cgroup_rules:
+      - 'c 189:* rmw' #  USB 匯流排 (libusb 通訊用)
+      - 'c 81:* rmw' #  Video4Linux 設備 (深度圖、RGB 影像)
+      - 'c 510:* rmw' #  HID 設備 (D455 的 IMU 角速度, Jetson 上 major=510)
+      - 'c 166:* rmw' #  ttyACM (Arduino)
+      - 'c 188:* rmw' #  ttyUSB (LiDAR 等)
+
     volumes:
       - /run/jtop.stats.sock:/run/jtop.stats.sock
       - /etc/localtime:/etc/localtime:ro

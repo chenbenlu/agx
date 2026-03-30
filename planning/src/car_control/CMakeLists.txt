@@ -16,7 +16,6 @@ endif()
 #  尋找依賴
 # ============================================================
 find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_python REQUIRED)  # 用於安裝 Python 模組
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -42,14 +41,17 @@ endif()
 # ============================================================
 
 # --- serial_bridge_node ---
-add_executable(serial_bridge_node scripts/serial_bridge_node.cpp)
+# 職責：獨佔 Serial Port，使用獨立 Reader Thread 做非阻塞讀取，
+#       根據 JSON Key 分流發布到 /raw_odom, /battery_state, /charge_status
+add_executable(serial_bridge_node src/serial_bridge_node.cpp)
 ament_target_dependencies(serial_bridge_node
   rclcpp
   std_msgs
 )
 
 # --- kinematics_node ---
-add_executable(kinematics_node scripts/kinematics_node.cpp)
+# 職責：cmd_vel→輪速、encoder→Odom/TF、電量/充電站狀態轉發
+add_executable(kinematics_node src/kinematics_node.cpp)
 ament_target_dependencies(kinematics_node
   rclcpp
   std_msgs
@@ -70,20 +72,6 @@ install(TARGETS
 )
 
 # ============================================================
-#  安裝 Python 模組 (保留原有 Python 節點)
-# ============================================================
-ament_python_install_package(${PROJECT_NAME})
-
-# 安裝 Python entry_points 腳本
-# ament_cmake 不使用 setup.py 的 entry_points，
-# 需透過 install(PROGRAMS ...) 安裝含 shebang 的 wrapper scripts
-install(PROGRAMS
-  scripts/car_controller_node
-  scripts/cmd_vel_to_serial_node
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-# ============================================================
 #  安裝 Launch / Config / Resource 檔案
 # ============================================================
 install(DIRECTORY launch/
@@ -94,12 +82,25 @@ install(DIRECTORY config/
   DESTINATION share/${PROJECT_NAME}/config
 )
 
+install(DIRECTORY urdf/
+  DESTINATION share/${PROJECT_NAME}/urdf
+)
+
 install(FILES resource/${PROJECT_NAME}
   DESTINATION share/ament_index/resource_index/packages
 )
 
 install(FILES package.xml
   DESTINATION share/${PROJECT_NAME}
+)
+
+# ============================================================
+#  安裝 Python 腳本（里程計評估工具）
+# ============================================================
+install(PROGRAMS
+  scripts/odom_recorder_node.py
+  scripts/plot_trajectory.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 # ============================================================

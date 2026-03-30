@@ -1,4 +1,0 @@
-#!/usr/bin/env python3
-"""Wrapper script: cmd_vel_to_serial_node (Python legacy)"""
-from car_control.cmd_vel_to_serial import main
-main()

@@ -15,7 +15,7 @@ export VLLM_CACHE_ROOT=/data/cosmos_cache/vllm
 ```
 
 ```bash
-vllm serve /data/models/Cosmos-Reason2-2B --allowed-local-media-path "/" --max-model-len 16384 --gpu-memory-utilization 0.7 --reasoning-parser qwen3 --port 8000 --download-dir /data/cosmos_cache/vllm/
+vllm serve /data/models/Cosmos-Reason2-2B --allowed-local-media-path "/" --max-model-len 16384 --gpu-memory-utilization 0.6 --reasoning-parser qwen3 --port 8000 --download-dir /data/cosmos_cache/vllm/ 
 
 test: --max-model-len 8192
 ```

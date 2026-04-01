@@ -1,15 +1,13 @@
 import asyncio
 import json
-import os
 import re
 import threading
 from pathlib import Path
 from typing import Optional
 
-import requests
 import rclpy
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from rclpy.node import Node
@@ -31,31 +29,45 @@ def extract_location(text: str) -> str:
     match = re.search(r"到(.+?)(去|做|進行|巡檢|查看|確認|$)", text)
     if match:
         return match.group(1).strip()
+
     return "未指定區域"
 
 
 def pick_asset(text: str) -> str:
-    if any(k in text for k in ["巡檢", "空拍", "俯視"]):
+    if any(k in text for k in ["巡檢", "空拍", "俯視", "查看上方"]):
         return "UAV"
-    if any(k in text for k in ["前往", "走過去", "到現場"]):
+    if any(k in text for k in ["前往", "走過去", "到現場", "派遣地面車"]):
         return "UGV"
     return "UAV"
 
 
-def build_task_payload(text: str) -> dict:
-    location = extract_location(text)
-    asset = pick_asset(text)
-    mission_type = "inspection" if "巡檢" in text else "dispatch"
+def build_fixed_reply(user_text: str) -> dict:
+    location = extract_location(user_text)
+    asset = pick_asset(user_text)
+    reply = f"任務啟動，出動設備：{asset}，地點：{location}"
     return {
-        "raw_text": text,
-        "mission_type": mission_type,
-        "target_location": location,
+        "raw_text": user_text,
         "asset": asset,
+        "target_location": location,
+        "reply": reply,
     }
 
 
+def resolve_frontend_dir() -> Path:
+    current_dir = Path(__file__).resolve().parent
+    candidates = [
+        current_dir / "frontend",
+        current_dir.parent / "frontend",
+        current_dir,
+    ]
+    for path in candidates:
+        if (path / "index.html").exists():
+            return path
+    return current_dir
+
+
 # =========================
-# WebSocket 連線管理
+# WebSocket 管理
 # =========================
 class ConnectionManager:
     def __init__(self):
@@ -90,15 +102,28 @@ class WebUIROSBridge(Node):
         self.loop = loop
         self.manager = manager
 
-        self.user_command_pub = self.create_publisher(String, "/webui/user_command", 10)
-        self.task_request_pub = self.create_publisher(String, "/webui/task_request", 10)
-        self.ai_reply_pub = self.create_publisher(String, "/webui/ai_reply", 10)
+        self.current_system_prompt = ""
+        self.current_video_uri = ""
 
-        self.create_subscription(String, "/webui/ai_reply", self.on_ai_reply, 10)
-        self.create_subscription(Bool, "/webui/fall_flag", self.on_fall_flag, 10)
-        self.create_subscription(String, "/webui/event_text", self.on_event_text, 10)
+        # Publishers
+        self.request_pub = self.create_publisher(String, "/llm/request", 10)
+        self.response_pub = self.create_publisher(String, "/llm/response", 10)
+        self.status_pub = self.create_publisher(String, "/llm/status", 10)
+        self.system_prompt_pub = self.create_publisher(String, "/llm/system_prompt", 10)
+        self.video_uri_pub = self.create_publisher(String, "/llm/video_uri", 10)
+
+        # Subscribers
+        self.create_subscription(String, "/llm/response", self.on_response, 10)
+        self.create_subscription(String, "/llm/status", self.on_status, 10)
+        self.create_subscription(String, "/llm/system_prompt", self.on_system_prompt, 10)
+        self.create_subscription(String, "/llm/video_uri", self.on_video_uri, 10)
+
+        # 異常事件 flag
+        self.create_subscription(Bool, "/llm/event_flag", self.on_event_flag, 10)
 
         self.get_logger().info("WebUI ROS bridge started.")
+        self.get_logger().info("Subscribed: /llm/response /llm/status /llm/system_prompt /llm/video_uri /llm/event_flag")
+        self.get_logger().info("Published : /llm/request /llm/response /llm/status /llm/system_prompt /llm/video_uri")
 
     def push_to_frontend(self, payload: dict):
         asyncio.run_coroutine_threadsafe(
@@ -106,58 +131,99 @@ class WebUIROSBridge(Node):
             self.loop
         )
 
-    def on_ai_reply(self, msg: String):
+    # ---------------------
+    # ROS2 callbacks
+    # ---------------------
+    def on_response(self, msg: String):
         self.push_to_frontend({
             "type": "ai_reply",
             "text": msg.data
         })
 
-    def on_fall_flag(self, msg: Bool):
-        if msg.data:
-            text = "異常事件觸發！事件：行人跌倒！派遣UGV中"
-            self.push_to_frontend({
-                "type": "event",
-                "text": text,
-                "event_type": "行人跌倒",
-                "action": "派遣UGV中"
-            })
-
-    def on_event_text(self, msg: String):
+    def on_status(self, msg: String):
         self.push_to_frontend({
-            "type": "event",
-            "text": msg.data,
-            "event_type": "自訂事件",
-            "action": "已接收"
+            "type": "status",
+            "text": msg.data
         })
 
-    def publish_user_command(self, text: str):
-        raw_msg = String()
-        raw_msg.data = text
-        self.user_command_pub.publish(raw_msg)
+    def on_system_prompt(self, msg: String):
+        self.current_system_prompt = msg.data
+        self.push_to_frontend({
+            "type": "system_prompt",
+            "text": msg.data
+        })
 
-        task = build_task_payload(text)
-        task_msg = String()
-        task_msg.data = json.dumps(task, ensure_ascii=False)
-        self.task_request_pub.publish(task_msg)
+    def on_video_uri(self, msg: String):
+        self.current_video_uri = msg.data
+        self.push_to_frontend({
+            "type": "video_uri",
+            "text": msg.data
+        })
 
-        return task
+    def on_event_flag(self, msg: Bool):
+        if not msg.data:
+            return
 
-    def publish_ai_reply(self, text: str):
+        event_text = "異常事件觸發！事件：行人跌倒！派遣UGV中"
+        status_text = "異常事件：行人跌倒，已派遣 UGV"
+
+        response_msg = String()
+        response_msg.data = event_text
+        self.response_pub.publish(response_msg)
+
+        status_msg = String()
+        status_msg.data = status_text
+        self.status_pub.publish(status_msg)
+
+        self.push_to_frontend({
+            "type": "event",
+            "text": event_text,
+            "event_type": "行人跌倒",
+            "action": "派遣UGV中"
+        })
+
+    # ---------------------
+    # 主流程
+    # ---------------------
+    def handle_user_command(self, user_text: str) -> dict:
+        result = build_fixed_reply(user_text)
+
+        request_msg = String()
+        request_msg.data = user_text
+        self.request_pub.publish(request_msg)
+
+        response_msg = String()
+        response_msg.data = result["reply"]
+        self.response_pub.publish(response_msg)
+
+        status_msg = String()
+        status_msg.data = f"已建立任務：{result['asset']} -> {result['target_location']}"
+        self.status_pub.publish(status_msg)
+
+        return result
+
+    def publish_system_prompt(self, text: str):
+        self.current_system_prompt = text
         msg = String()
         msg.data = text
-        self.ai_reply_pub.publish(msg)
+        self.system_prompt_pub.publish(msg)
+
+    def publish_video_uri(self, text: str):
+        self.current_video_uri = text
+        msg = String()
+        msg.data = text
+        self.video_uri_pub.publish(msg)
 
 
 # =========================
 # FastAPI
 # =========================
-BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = BASE_DIR / "frontend"
-
 app = FastAPI()
 manager = ConnectionManager()
+FRONTEND_DIR = resolve_frontend_dir()
 
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 ros_node: Optional[WebUIROSBridge] = None
 ros_thread: Optional[threading.Thread] = None
@@ -167,46 +233,8 @@ class CommandRequest(BaseModel):
     text: str
 
 
-def call_llm_openai_compat(user_text: str, task: dict) -> str:
-    endpoint = os.getenv("LLM_ENDPOINT", "http://localhost:8000/v1/chat/completions")
-    model = os.getenv("LLM_MODEL", "local-model")
-    api_key = os.getenv("LLM_API_KEY", "")
-
-    system_prompt = (
-        "你是機器人任務指揮介面的 AI 助理。"
-        "請根據使用者命令，以繁體中文簡短回覆。"
-        "固定格式為：任務啟動，出動設備：<設備>，地點：<地點>。"
-        "不要加入多餘說明。"
-    )
-
-    user_prompt = (
-        f"使用者命令：{user_text}\n"
-        f"設備：{task['asset']}\n"
-        f"地點：{task['target_location']}"
-    )
-
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.2,
-        "max_tokens": 64,
-    }
-
-    resp = requests.post(endpoint, headers=headers, json=payload, timeout=20)
-    resp.raise_for_status()
-    data = resp.json()
-    return data["choices"][0]["message"]["content"].strip()
-
-
-def build_rule_reply(task: dict) -> str:
-    return f"任務啟動，出動設備：{task['asset']}，地點：{task['target_location']}"
+class TextRequest(BaseModel):
+    text: str
 
 
 @app.on_event("startup")
@@ -236,16 +264,43 @@ async def shutdown_event():
 
 @app.get("/")
 async def index():
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
+    index_path = FRONTEND_DIR / "index.html"
+    if not index_path.exists():
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": f"index.html not found: {index_path}"}
+        )
+    return FileResponse(str(index_path))
+
+
+@app.get("/health")
+async def health():
+    return {
+        "ok": True,
+        "frontend_dir": str(FRONTEND_DIR),
+        "index_exists": (FRONTEND_DIR / "index.html").exists()
+    }
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+
     await websocket.send_json({
         "type": "system",
         "text": "WebSocket 已連線，等待任務與事件。"
     })
+
+    if ros_node is not None:
+        await websocket.send_json({
+            "type": "system_prompt",
+            "text": ros_node.current_system_prompt
+        })
+        await websocket.send_json({
+            "type": "video_uri",
+            "text": ros_node.current_video_uri
+        })
+
     try:
         while True:
             await websocket.receive_text()
@@ -256,44 +311,66 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/api/command")
 async def api_command(req: CommandRequest):
     global ros_node
+    if ros_node is None:
+        return {"ok": False, "error": "ROS node not ready"}
+
     text = req.text.strip()
     if not text:
         return {"ok": False, "error": "empty text"}
 
-    task = ros_node.publish_user_command(text)
-
-    llm_mode = os.getenv("LLM_MODE", "rule").lower()
-
-    try:
-        if llm_mode == "openai_compat":
-            reply = call_llm_openai_compat(text, task)
-        else:
-            reply = build_rule_reply(task)
-    except Exception as e:
-        reply = build_rule_reply(task)
-        print(f"[WARN] LLM call failed, fallback to rule reply: {e}")
-
-    ros_node.publish_ai_reply(reply)
+    result = ros_node.handle_user_command(text)
 
     await manager.broadcast_json({
         "type": "task",
-        "task": task
+        "task": {
+            "asset": result["asset"],
+            "target_location": result["target_location"]
+        }
     })
 
     return {
         "ok": True,
-        "task": task,
-        "reply": reply
+        "reply": result["reply"],
+        "task": {
+            "asset": result["asset"],
+            "target_location": result["target_location"]
+        }
     }
 
 
-@app.post("/api/simulate/fall")
-async def api_simulate_fall():
-    text = "異常事件觸發！事件：行人跌倒！派遣UGV中"
-    await manager.broadcast_json({
-        "type": "event",
-        "text": text,
-        "event_type": "行人跌倒",
-        "action": "派遣UGV中"
-    })
+@app.post("/api/system_prompt")
+async def api_system_prompt(req: TextRequest):
+    global ros_node
+    if ros_node is None:
+        return {"ok": False, "error": "ROS node not ready"}
+
+    ros_node.publish_system_prompt(req.text.strip())
+
+    return {
+        "ok": True,
+        "text": req.text.strip()
+    }
+
+
+@app.post("/api/video_uri")
+async def api_video_uri(req: TextRequest):
+    global ros_node
+    if ros_node is None:
+        return {"ok": False, "error": "ROS node not ready"}
+
+    ros_node.publish_video_uri(req.text.strip())
+
+    return {
+        "ok": True,
+        "text": req.text.strip()
+    }
+
+
+@app.post("/api/simulate/event")
+async def api_simulate_event():
+    global ros_node
+    if ros_node is None:
+        return {"ok": False, "error": "ROS node not ready"}
+
+    ros_node.on_event_flag(Bool(data=True))
     return {"ok": True}

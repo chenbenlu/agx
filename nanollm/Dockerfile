@@ -40,7 +40,8 @@ RUN pip3 install --no-cache-dir \
     transformers \
     timm \
     accelerate \
-    pyyaml
+    pyyaml \
+    uvicorn[standard]
 
 # 安裝 CLIP (ftfy 和 regex 是相依套件)
 RUN pip3 install --no-cache-dir ftfy regex

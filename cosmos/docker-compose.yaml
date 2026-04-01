@@ -46,7 +46,8 @@ services:
       - /home/systemlabagx/disk/workspaces/data:/data
       - /home/systemlabagx/disk/workspaces/data/cosmos_cache:/root/.cache
       - /home/systemlabagx/disk/workspaces:/workspaces
-      - ./VLA:/opt/vla_demo
+      # - ./VLA:/opt/vla_demo
+      - /home/systemlabagx/disk/agx/cosmos/video:/workspaces/cosmos_ws/video
     working_dir: /workspaces/cosmos_ws
     stdin_open: true
     tty: true

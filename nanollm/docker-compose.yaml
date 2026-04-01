@@ -49,6 +49,8 @@ services:
       # 與 Isaac ROS 共用 workspace
       - /home/systemlabagx/disk/workspaces:/workspaces
       - /home/systemlabagx/disk/agx/nanollm/bridge_ws:/data/bridge_ws
+      - /home/systemlabagx/disk/agx/nanollm/webui_system:/data/webui_system
+      
     devices:
       - /dev/snd
       - /dev/bus/usb

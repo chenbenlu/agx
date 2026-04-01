@@ -48,7 +48,7 @@ services:
       - /home/systemlabagx/disk/workspaces/data/nanollm_models:/data/models
       # 與 Isaac ROS 共用 workspace
       - /home/systemlabagx/disk/workspaces:/workspaces
-      - ../cosmos/VLA:/opt/vla_demo
+      - /home/systemlabagx/disk/agx/nanollm/bridge_ws:/data/bridge_ws
     devices:
       - /dev/snd
       - /dev/bus/usb

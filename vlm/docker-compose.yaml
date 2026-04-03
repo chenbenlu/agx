@@ -6,8 +6,8 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
-    image: agx_ros/isaac_ros:latest
-    container_name: isaac_ros
+    image: agx_ros/vlm:latest
+    container_name: vlm
     profiles: [ "agx_mode" ]
     network_mode: host
     environment:
@@ -18,9 +18,11 @@ services:
       - ISAAC_ROS_WS=/workspaces/isaac_ros-dev
       - DISPLAY=${DISPLAY}
       - XAUTHORITY=/tmp/.docker.xauth
+      - EGL_PLATFORM=device          # VPI 需要 EGL，headless 環境下必須用 device platform
     privileged: true
     runtime: nvidia
     volumes:
+      - /dev/:/dev/
       - /run/jtop.stats.sock:/run/jtop.stats.sock
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro

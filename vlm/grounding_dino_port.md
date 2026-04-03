@@ -110,25 +110,67 @@ pip3 install transformers
 
 此版本支援雙模式推論驗證：
 
+> ⚠️ **重要：** launch file 沒有 `text_prompt` 參數，prompt 必須在啟動後透過 service call 設定。
+> 影像解析度需與輸入影片/相機實際尺寸一致（`input_image_width` / `input_image_height`）。
+
 ### 模式 A：影片回放測試 (MP4 Player)
 
 不依賴實體相機，直接將準備好的 `.mp4` 影片推流到 DINO 管線進行推論驗證。
-開啟兩個終端機並運行：
+開啟四個終端機並運行：
+
+> ⚠️ `input_image_width` / `input_image_height` **必須與影片實際解析度一致**，否則 resize 錯誤導致無偵測結果。
 
 **Terminal 1 (啟動 Grounding DINO)**
 ```bash
 source /opt/ros/humble/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash
+
+# ugv.mp4 (1280×720)
 ros2 launch isaac_ros_grounding_dino isaac_ros_grounding_dino.launch.py \
    model_file_path:=/workspaces/isaac_ros-dev/isaac_ros_assets/models/grounding_dino/grounding_dino_model.onnx \
    engine_file_path:=/workspaces/isaac_ros-dev/isaac_ros_assets/models/grounding_dino/grounding_dino_model.plan \
-   text_prompt:="a man. a cat."
+   input_image_width:=1280 \
+   input_image_height:=720
+
+# test_man_cat.mp4 (1024×1024)
+# ros2 launch isaac_ros_grounding_dino isaac_ros_grounding_dino.launch.py \
+#    model_file_path:=... engine_file_path:=... \
+#    input_image_width:=1024 input_image_height:=1024
 ```
 
 **Terminal 2 (啟動影片播放器)**
 ```bash
 source /opt/ros/humble/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash
-python3 /workspaces/isaac_ros-dev/src/vlm_mp4_player.py --ros-args -p video:=/workspaces/isaac_ros-dev/test_man_cat.mp4
+python3 /workspaces/isaac_ros-dev/src/vlm_mp4_player.py --ros-args \
+  -p video:=/workspaces/isaac_ros-dev/ugv.mp4
 ```
+
+**Terminal 3 (設定偵測 Prompt，launch 完成後執行)**
+```bash
+source /opt/ros/humble/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash
+# 每個類別後面必須加句點 "."
+ros2 service call /set_prompt isaac_ros_grounding_dino_interfaces/srv/SetPrompt \
+  "{prompt: 'a traffic cone. a person. a white square sign.'}"
+```
+
+**Terminal 4 (BBox 視覺化)**
+```bash
+# bbox 座標對應 padded_image (960×544) 空間，訂閱此 topic 畫框才正確
+source /opt/ros/humble/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash
+python3 /workspaces/isaac_ros-dev/src/bbox_visualizer.py
+# Foxglove → Image panel → topic: /annotated_image
+```
+
+**監看偵測結果（選用）**
+```bash
+ros2 topic echo /detections_output
+```
+
+**已驗證 score（ugv.mp4）**
+| 類別 | score 範圍 | 備註 |
+|---|---|---|
+| a traffic cone | ~0.90 | 穩定每幀偵測 |
+| a person | 0.51–0.77 | 穩定 |
+| a white square sign | 0.51–0.58 | 部分幀偵測，borderline |
 
 ### 模式 B：RealSense D455 實機測試
 
@@ -136,7 +178,12 @@ python3 /workspaces/isaac_ros-dev/src/vlm_mp4_player.py --ros-args -p video:=/wo
 
 **Terminal 1 (啟動 Grounding DINO)**
 ```bash
-# ...同模式A，請自行更改 text_prompt
+source /opt/ros/humble/setup.bash && source /workspaces/isaac_ros-dev/install/setup.bash
+ros2 launch isaac_ros_grounding_dino isaac_ros_grounding_dino.launch.py \
+   model_file_path:=/workspaces/isaac_ros-dev/isaac_ros_assets/models/grounding_dino/grounding_dino_model.onnx \
+   engine_file_path:=/workspaces/isaac_ros-dev/isaac_ros_assets/models/grounding_dino/grounding_dino_model.plan \
+   input_image_width:=640 \
+   input_image_height:=480
 ```
 
 **Terminal 2 (啟動 RealSense)**
@@ -148,4 +195,10 @@ ros2 launch realsense2_camera rs_launch.py \
    rgb_camera.profile:=640x480x30
 ```
 
-> **提示：** 可以在 Foxglove 中訂閱 `/image_rect_out` 主題，即可即時觀看已上好 bbox 的合成影像。
+**Terminal 3 (設定 Prompt)**
+```bash
+ros2 service call /set_prompt isaac_ros_grounding_dino_interfaces/srv/SetPrompt \
+  "{prompt: 'a person. a chair.'}"
+```
+
+> **提示：** 用 `bbox_visualizer.py` 訂閱 `/padded_image` + `/detections_output`，發布 `/annotated_image`，在 Foxglove Image panel 即可即時觀看帶 bbox 的畫面。

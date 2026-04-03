@@ -81,5 +81,6 @@ env/
 # 系統日誌
 *.log
 
-# Ignore Claude AI assistant temp directories
+# Claude Code
 tmpclaude-*
+.claude/settings.local.json

@@ -27,11 +27,11 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install -U jetson-stats
 
 # 4. 安裝額外 ROS 2 Humble 套件（基底已包含 ROS Humble）
-RUN apt-get update && apt-get install -y \
-    ros-humble-rmw-cyclonedds-cpp \
-    ros-humble-cv-bridge \
-    ros-humble-image-transport \
-    && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && apt-get install -y \
+#     ros-humble-rmw-cyclonedds-cpp \
+#     ros-humble-cv-bridge \
+#     ros-humble-image-transport \
+#     && rm -rf /var/lib/apt/lists/*
 
 # 5. 安裝額外的 Python 套件 (不要覆蓋基底映像檔的 numpy 和 opencv)
 RUN pip3 install --no-cache-dir \

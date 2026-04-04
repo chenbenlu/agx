@@ -31,7 +31,6 @@ RUN apt-get update && apt-get install -y \
     ros-humble-rmw-cyclonedds-cpp \
     ros-humble-cv-bridge \
     ros-humble-image-transport \
-    python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
 # 5. 安裝額外的 Python 套件 (不要覆蓋基底映像檔的 numpy 和 opencv)

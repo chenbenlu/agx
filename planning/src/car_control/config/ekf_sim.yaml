@@ -1,0 +1,27 @@
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.1
+    two_d_mode: true
+    transform_time_offset: 0.0
+    transform_timeout: 0.0
+    print_diagnostics: true
+    # Isaac Sim 已透過 ros2_publish_raw_transform_tree 發布 odom->base_footprint TF，
+    # 此處關閉 EKF 的 TF 發布，避免重複衝突。
+    publish_tf: false
+
+    # ==== Frames 設定 (與 ekf.yaml 一致) ====
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom
+
+    # ==== Odom0: Isaac Sim Encoder OmniGraph (/odom) ====
+    odom0: /odom
+    odom0_config: [true,   true,  false,
+                   false,  false, true,    # x, y 位置 + yaw 姿態
+                   true,   true,  false,   # x, y 線速度
+                   false,  false, true,    # yaw 角速度
+                   false,  false, false]
+    odom0_queue_size: 10
+    odom0_differential: false

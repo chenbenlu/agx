@@ -82,8 +82,8 @@ RUN git clone --depth 1 --branch v2.56.4 https://github.com/IntelRealSense/libre
     cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
     -DFORCE_RSUSB_BACKEND=true \
-    -DBUILD_EXAMPLES=true \
-    -DBUILD_GRAPHICAL_EXAMPLES=true \
+    -DBUILD_EXAMPLES=false \
+    -DBUILD_GRAPHICAL_EXAMPLES=false \
     -DBUILD_PYTHON_BINDINGS=true \
     -DPYTHON_EXECUTABLE=/usr/bin/python3 \
     -DCMAKE_INSTALL_PREFIX=/usr/local && \
@@ -91,7 +91,7 @@ RUN git clone --depth 1 --branch v2.56.4 https://github.com/IntelRealSense/libre
     make install && \
     cp /tmp/librealsense/config/99-realsense-libusb.rules /etc/udev/rules.d/ && \
     # 覆蓋 ROS apt 安裝的 V4L2 版
-    cp /usr/local/lib/librealsense2.so.2.56.4 /opt/ros/humble/lib/aarch64-linux-gnu/librealsense2.so.2.56.4 && \
+    cp /usr/local/lib/librealsense2.so.2.56.4 /opt/ros/humble/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/librealsense2.so.2.56.4 && \
     ldconfig && \
     # 將校正腳本複製到 /root 目錄下保存，再刪除原始碼
     cp /tmp/librealsense/tools/rs-imu-calibration/rs-imu-calibration.py /root/rs-imu-calibration.py && \

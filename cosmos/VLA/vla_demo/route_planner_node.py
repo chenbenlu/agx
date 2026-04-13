@@ -13,6 +13,7 @@ import cv2
 from cv_bridge import CvBridge
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
@@ -233,6 +234,8 @@ class RoutePlannerNode(Node):
         self.frame_buffer: deque[tuple[float, Any]] = deque()
         self.camera_subscription = None
         self.camera_topic = ""
+        self.frames_received = 0
+        self.last_frame_stamp = 0.0
 
         self.route_plan_pub = self.create_publisher(String, ROUTE_PLAN_TOPIC, 10)
         self.set_mission_pub = self.create_publisher(String, SET_MISSION_TOPIC, 10)
@@ -255,7 +258,7 @@ class RoutePlannerNode(Node):
             Image,
             normalized_topic,
             self._on_image,
-            10,
+            qos_profile_sensor_data,
         )
         self.get_logger().info(f"Route planner camera source set to {normalized_topic}")
 
@@ -265,6 +268,8 @@ class RoutePlannerNode(Node):
         if stamp <= 0:
             stamp = self._now()
         self.frame_buffer.append((stamp, frame))
+        self.frames_received += 1
+        self.last_frame_stamp = stamp
         max_buffer_sec = float(self.get_parameter("max_buffer_sec").value)
         while self.frame_buffer and (stamp - self.frame_buffer[0][0]) > max_buffer_sec:
             self.frame_buffer.popleft()
@@ -318,7 +323,12 @@ class RoutePlannerNode(Node):
         frames = [(stamp, frame) for stamp, frame in self.frame_buffer if stamp >= window_start]
         if not frames:
             raise RuntimeError(
-                f"No buffered frames available on {request.camera_source} for live route planning"
+                "No buffered frames available on "
+                f"{request.camera_source} for live route planning "
+                f"(frames_received={self.frames_received}, "
+                f"buffer_size={len(self.frame_buffer)}, "
+                f"last_frame_stamp={self.last_frame_stamp:.3f}, "
+                f"window_start={window_start:.3f})"
             )
         if len(frames) == 1:
             path = temp_root / "frame.jpg"

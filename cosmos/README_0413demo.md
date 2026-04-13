@@ -118,7 +118,7 @@ ros2 topic pub --once /vla/route_request std_msgs/msg/String \
 - live camera 模式：
 ```bash
 ros2 topic pub --once /vla/route_request std_msgs/msg/String \
-"{data: '{\"mission_id\":\"route_live_demo\",\"goal_text\":\"前往貨梯區域\",\"environment_id\":\"hallway_9f\",\"source_mode\":\"live_camera\",\"camera_source\":\"/camera/camera/color/image_raw\",\"clip_duration_sec\":3.0,\"inference_interval_sec\":1.5}'}"
+"{data: '{\"mission_id\":\"route_live_demo\",\"goal_text\":\"離開室內區域\",\"environment_id\":\"hallway_9f\",\"source_mode\":\"live_camera\",\"camera_source\":\"/camera/camera/color/image_raw\",\"clip_duration_sec\":3.0,\"inference_interval_sec\":1.5}'}"
 ```
 ### 如果是 live camera，再補相機
 - D455:
@@ -147,3 +147,9 @@ docker exec -it nanollm bash
 cd /data/webui_system
 uvicorn backend.app:app --host 0.0.0.0 --port 8089
 ```
+
+
+#### [ERROR] [vla_route_planner]: Route planning failed: No buffered frames available on /camera/camera/color/image_raw for live route planning, 使用live會出現這樣的錯誤
+把 route_planner_node.py 改成：
+用 qos_profile_sensor_data 訂閱 /camera/camera/color/image_raw
+補上 frames_received / buffer_size / last_frame_stamp /

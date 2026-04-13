@@ -2,7 +2,7 @@ services:
   planning:
     network_mode: host
     runtime: nvidia
-    ipc: host
+
     # Jetson Tegra 核心缺少 hid_sensor_custom 模組，
     # 強制 librealsense 走 libusb 後端以存取 D455 IMU
     environment:

@@ -100,6 +100,8 @@ install(FILES package.xml
 install(PROGRAMS
   scripts/odom_recorder_node.py
   scripts/plot_trajectory.py
+  scripts/foxglove_pose_republisher.py
+  scripts/diagnose_sim_time.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -49,6 +49,32 @@ def guess_media_type(path: Path) -> str:
         return "image/webp"
     return "application/octet-stream"
 
+
+def extract_location(text: str) -> str:
+    known_places = [
+        "後花園",
+        "前庭",
+        "大門口",
+        "停車場",
+        "中庭",
+        "行政大樓",
+        "實驗室",
+        "倉庫",
+        "操場",
+        "屋頂",
+    ]
+    for place in known_places:
+        if place in text:
+            return place
+
+    match = re.search(r"到(.+?)(去|做|進行|巡檢|查看|確認|$)", text)
+    if match:
+        return match.group(1).strip()
+
+    return "未指定區域"
+
+
+
 def build_fixed_reply(user_text: str) -> dict[str, str]:
     location = extract_location(user_text)
     reply = f"任務啟動"

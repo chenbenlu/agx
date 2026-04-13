@@ -147,8 +147,55 @@ docker exec -it nanollm bash
 cd /data/webui_system
 uvicorn backend.app:app --host 0.0.0.0 --port 8089
 ```
+要看當下 buffer，可以用這幾種方式：
+在 webui 直接看
+右側現在有 Live Buffer 預覽 卡片。
+只要送 live_camera route request，buffer 一準備好就會顯示最新 clip。
+訂閱 ROS topic 看 metadata
+`ros2 topic echo /vla/route_buffer_status`
 
+會看到像這些欄位：
+- status
+- media_type
+- frame_count
+- fps
+- local_path
+- file_uri
+- 直接打 backend API
+- 先啟 webui backend：
+```bash
+docker exec -it nanollm bash
+cd /data/webui_system
+uvicorn backend.app:app --host 0.0.0.0 --port 8089
+```
+查狀態：
+`curl http://127.0.0.1:8089/api/route_buffer/status`
 
+直接拿最新 buffer 檔：
+`curl -O http://127.0.0.1:8089/api/route_buffer/latest`
+在 container 內直接看檔案
+route_planner_node 現在會把最新 live buffer 留在：
+/workspaces/vla_route_media/latest_live_buffer.mp4
+或 /workspaces/vla_route_media/latest_live_buffer.jpg
+
+可先看：
+`ls -lh /workspaces/vla_route_media`
+
+要套用這次變更，你至少要重啟這兩個 process：
+```bash
+docker exec -it nanollm bash
+if [ -f /opt/ros/install/setup.bash ]; then
+  source /opt/ros/install/setup.bash
+else
+  source /opt/ros/humble/setup.bash
+fi
+export PYTHONPATH=/opt/vla_demo:$PYTHONPATH
+python3 -m vla_demo.route_planner_node --ros-args -p backend_mode:=cosmos_cli -p host:=localhost -p port:=8000
+
+docker exec -it nanollm bash
+cd /data/webui_system
+uvicorn backend.app:app --host 0.0.0.0 --port 8089
+```
 #### [ERROR] [vla_route_planner]: Route planning failed: No buffered frames available on /camera/camera/color/image_raw for live route planning, 使用live會出現這樣的錯誤
 把 route_planner_node.py 改成：
 用 qos_profile_sensor_data 訂閱 /camera/camera/color/image_raw

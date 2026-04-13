@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections import deque
+import json
 from pathlib import Path
-import subprocess
 import tempfile
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 
 import cv2
 from cv_bridge import CvBridge
@@ -93,19 +95,17 @@ class MockRoutePlannerBackend:
 class CosmosCLIBackend:
     def __init__(
         self,
-        python_executable: str,
-        inference_script: str,
         host: str,
         port: int,
         model: str,
         timeout_sec: float,
     ) -> None:
-        self.python_executable = python_executable
-        self.inference_script = inference_script
         self.host = host
         self.port = port
         self.model = model
         self.timeout_sec = timeout_sec
+        self.api_url = f"http://{self.host}:{self.port}/v1/chat/completions"
+        self.models_url = f"http://{self.host}:{self.port}/v1/models"
 
     def infer(
         self,
@@ -115,30 +115,95 @@ class CosmosCLIBackend:
         media_path: str,
     ) -> dict[str, Any]:
         del request
-        cmd = [
-            self.python_executable,
-            self.inference_script,
-            "online",
-            "--host",
-            self.host,
-            "--port",
-            str(self.port),
-            "--prompt",
-            prompt_text,
-        ]
-        if self.model:
-            cmd.extend(["--model", self.model])
-        cmd.extend([media_flag, media_path])
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=self.timeout_sec,
-            check=False,
+        media_type = "image_url" if media_flag == "--images" else "video_url"
+        media_url = self._normalize_media_url(media_path)
+        model_name = self.model or self._resolve_model_name()
+        payload = {
+            "model": model_name,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an AMR route planning assistant. "
+                        "Return exactly one JSON object and no markdown."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt_text,
+                        },
+                        {
+                            "type": media_type,
+                            media_type: {"url": media_url},
+                        },
+                    ],
+                },
+            ],
+            "temperature": 0.2,
+            "top_p": 0.85,
+            "max_completion_tokens": 2048,
+            "stream": False,
+        }
+        raw_response = self._post_json(self.api_url, payload)
+        choices = raw_response.get("choices") or []
+        if not choices:
+            raise RuntimeError("Cosmos server returned no completion choices")
+        content = (
+            choices[0]
+            .get("message", {})
+            .get("content", "")
         )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-        return extract_json_object(result.stdout)
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Cosmos server returned empty message content")
+        return extract_json_object(content)
+
+    def _normalize_media_url(self, media_path: str) -> str:
+        if media_path.startswith(("http://", "https://", "file://")):
+            return media_path
+        return Path(media_path).expanduser().resolve().as_uri()
+
+    def _resolve_model_name(self) -> str:
+        response = self._get_json(self.models_url)
+        models = response.get("data") or []
+        if not models:
+            raise RuntimeError("Cosmos server returned no models")
+        model_id = models[0].get("id")
+        if not isinstance(model_id, str) or not model_id.strip():
+            raise RuntimeError("Cosmos server model list did not contain a usable id")
+        return model_id
+
+    def _get_json(self, url: str) -> dict[str, Any]:
+        request = Request(url, method="GET")
+        try:
+            with urlopen(request, timeout=self.timeout_sec) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise RuntimeError(
+                f"Cosmos server HTTP {exc.code}: {exc.read().decode('utf-8', errors='ignore')}"
+            ) from exc
+        except URLError as exc:
+            raise RuntimeError(f"Cosmos server connection failed: {exc}") from exc
+
+    def _post_json(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload).encode("utf-8")
+        request = Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_sec) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise RuntimeError(
+                f"Cosmos server HTTP {exc.code}: {exc.read().decode('utf-8', errors='ignore')}"
+            ) from exc
+        except URLError as exc:
+            raise RuntimeError(f"Cosmos server connection failed: {exc}") from exc
 
 
 class RoutePlannerNode(Node):
@@ -146,8 +211,6 @@ class RoutePlannerNode(Node):
         super().__init__("vla_route_planner")
 
         self.declare_parameter("backend_mode", "cosmos_cli")
-        self.declare_parameter("python_executable", "python3")
-        self.declare_parameter("inference_script", "/workspaces/cosmos_ws/inference.py")
         self.declare_parameter("host", "localhost")
         self.declare_parameter("port", 8000)
         self.declare_parameter("model", "")
@@ -160,8 +223,6 @@ class RoutePlannerNode(Node):
             self.backend = MockRoutePlannerBackend()
         else:
             self.backend = CosmosCLIBackend(
-                python_executable=str(self.get_parameter("python_executable").value),
-                inference_script=str(self.get_parameter("inference_script").value),
                 host=str(self.get_parameter("host").value),
                 port=int(self.get_parameter("port").value),
                 model=str(self.get_parameter("model").value),

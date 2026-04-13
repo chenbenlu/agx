@@ -40,17 +40,23 @@ vllm serve /data/models/Cosmos-Reason2-2B \
   --download-dir /data/cosmos_cache/vllm/
 
 ```
-### 2. 在 cosmos 另一個 shell 啟動 route planner
+### 2. 在 nanollm 跑 route planner
 ```bash
-make join c=cosmos
-source /opt/ros/humble/setup.bash
-source /workspaces/cosmos_ws/.venv/bin/activate
+docker exec -it nanollm bash
+
+if [ -f /opt/ros/install/setup.bash ]; then
+  source /opt/ros/install/setup.bash
+else
+  source /opt/ros/humble/setup.bash
+fi
+
 export PYTHONPATH=/opt/vla_demo:$PYTHONPATH
 
 python3 -m vla_demo.route_planner_node --ros-args \
   -p backend_mode:=cosmos_cli \
   -p host:=localhost \
   -p port:=8000
+
 ```
 ### 3. 在 nanollm 啟動 mission manager
 ```bash
@@ -134,4 +140,10 @@ ros2 topic echo /vla/inference_result
 ros2 topic echo /vla/mission_state
 ros2 topic echo /detections_output
 
+```
+### webui
+```bash
+docker exec -it nanollm bash
+cd /data/webui_system
+uvicorn backend.app:app --host 0.0.0.0 --port 8089
 ```

@@ -127,9 +127,9 @@ make join c=vlm
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 ros2 launch realsense2_camera rs_launch.py \
-  enable_color:=true \
-  enable_depth:=false \
-  rgb_camera.profile:=640x480x30
+enable_color:=true \
+enable_depth:=false \
+rgb_camera.profile:=1280x720x30
 ```
 ### 常用監看
 ```bash

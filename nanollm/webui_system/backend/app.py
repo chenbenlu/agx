@@ -19,6 +19,7 @@ try:
         CURRENT_STEP_TOPIC,
         LANDMARK_DETECTION_TOPIC,
         MISSION_STATE_TOPIC,
+        ROUTE_BUFFER_STATUS_TOPIC,
         ROUTE_PLAN_TOPIC,
         ROUTE_REQUEST_TOPIC,
     )
@@ -28,6 +29,7 @@ except ImportError:
     CURRENT_STEP_TOPIC = "/vla/current_step"
     LANDMARK_DETECTION_TOPIC = "/vla/landmark_detection"
     MISSION_STATE_TOPIC = "/vla/mission_state"
+    ROUTE_BUFFER_STATUS_TOPIC = "/vla/route_buffer_status"
 
 DEFAULT_ENVIRONMENT_ID = "hallway_9f"
 DEFAULT_CAMERA_SOURCE = "/camera/camera/color/image_raw"
@@ -35,46 +37,22 @@ DEFAULT_CLIP_DURATION_SEC = 3.0
 DEFAULT_INFERENCE_INTERVAL_SEC = 1.5
 
 
-def extract_location(text: str) -> str:
-    known_places = [
-        "後花園",
-        "前庭",
-        "大門口",
-        "停車場",
-        "中庭",
-        "行政大樓",
-        "實驗室",
-        "倉庫",
-        "操場",
-        "屋頂",
-    ]
-    for place in known_places:
-        if place in text:
-            return place
-
-    match = re.search(r"到(.+?)(去|做|進行|巡檢|查看|確認|$)", text)
-    if match:
-        return match.group(1).strip()
-
-    return "未指定區域"
-
-
-def pick_asset(text: str) -> str:
-    if any(k in text for k in ["巡檢", "空拍", "俯視", "查看上方"]):
-        return "UAV"
-    if any(k in text for k in ["前往", "走過去", "到現場", "派遣地面車"]):
-        return "UGV"
-    return "UGV"
-
+def guess_media_type(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".mp4":
+        return "video/mp4"
+    if suffix in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    if suffix == ".png":
+        return "image/png"
+    if suffix == ".webp":
+        return "image/webp"
+    return "application/octet-stream"
 
 def build_fixed_reply(user_text: str) -> dict[str, str]:
     location = extract_location(user_text)
-    asset = pick_asset(user_text)
-    reply = f"任務啟動，出動設備：{asset}，地點：{location}"
+    reply = f"任務啟動"
     return {
-        "raw_text": user_text,
-        "asset": asset,
-        "target_location": location,
         "reply": reply,
     }
 
@@ -185,6 +163,7 @@ class WebUIROSBridge(Node):
         self.latest_current_step: dict[str, Any] = {}
         self.latest_landmark_detection: dict[str, Any] = {}
         self.latest_mission_state: dict[str, Any] = {}
+        self.latest_route_buffer_status: dict[str, Any] = {}
 
         self.request_pub = self.create_publisher(String, "/llm/request", 10)
         self.response_pub = self.create_publisher(String, "/llm/response", 10)
@@ -207,12 +186,19 @@ class WebUIROSBridge(Node):
             10,
         )
         self.create_subscription(String, MISSION_STATE_TOPIC, self.on_mission_state, 10)
+        self.create_subscription(
+            String,
+            ROUTE_BUFFER_STATUS_TOPIC,
+            self.on_route_buffer_status,
+            10,
+        )
 
         self.get_logger().info("WebUI ROS bridge started.")
         self.get_logger().info(
             "Subscribed: /llm/response /llm/status /llm/system_prompt /llm/video_uri "
             f"/llm/event_flag {ROUTE_PLAN_TOPIC} {CURRENT_STEP_TOPIC} "
-            f"{LANDMARK_DETECTION_TOPIC} {MISSION_STATE_TOPIC}"
+            f"{LANDMARK_DETECTION_TOPIC} {MISSION_STATE_TOPIC} "
+            f"{ROUTE_BUFFER_STATUS_TOPIC}"
         )
         self.get_logger().info(
             "Published : /llm/request /llm/response /llm/status /llm/system_prompt "
@@ -360,6 +346,11 @@ class WebUIROSBridge(Node):
         payload = self._push_json_topic("mission_state", msg.data)
         if payload is not None:
             self.latest_mission_state = payload
+
+    def on_route_buffer_status(self, msg: String):
+        payload = self._push_json_topic("route_buffer_status", msg.data)
+        if payload is not None:
+            self.latest_route_buffer_status = payload
 
     def handle_user_command(self, user_text: str) -> dict[str, Any]:
         result = build_fixed_reply(user_text)
@@ -542,6 +533,13 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json(
                 {"type": "mission_state", "payload": ros_node.latest_mission_state}
             )
+        if ros_node.latest_route_buffer_status:
+            await websocket.send_json(
+                {
+                    "type": "route_buffer_status",
+                    "payload": ros_node.latest_route_buffer_status,
+                }
+            )
 
     try:
         while True:
@@ -609,6 +607,44 @@ async def api_route_request(req: RouteRequest):
 
     ros_node.publish_route_request(payload, remember_mission_id=bool(req.mission_id.strip()))
     return {"ok": True, "route_request": payload}
+
+
+@app.get("/api/route_buffer/status")
+async def api_route_buffer_status():
+    global ros_node
+    if ros_node is None:
+        return {"ok": False, "error": "ROS node not ready"}
+    if not ros_node.latest_route_buffer_status:
+        return {"ok": False, "error": "No route buffer status yet"}
+    return {"ok": True, "route_buffer_status": ros_node.latest_route_buffer_status}
+
+
+@app.get("/api/route_buffer/latest")
+async def api_route_buffer_latest():
+    global ros_node
+    if ros_node is None:
+        return JSONResponse(status_code=503, content={"ok": False, "error": "ROS node not ready"})
+
+    payload = ros_node.latest_route_buffer_status
+    path_text = str(payload.get("local_path", "")).strip()
+    if not path_text:
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": "No persisted live buffer file is available"},
+        )
+
+    path = Path(path_text)
+    if not path.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": f"Live buffer file not found: {path}"},
+        )
+
+    return FileResponse(
+        str(path),
+        media_type=guess_media_type(path),
+        filename=path.name,
+    )
 
 
 @app.post("/api/system_prompt")

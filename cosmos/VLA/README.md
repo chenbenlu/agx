@@ -470,3 +470,56 @@ export PYTHONPATH=/opt/vla_demo:$PYTHONPATH
 - Foxglove 畫面配置範例
 - 真機彩排 SOP
 - `cosmos_cli` 實際 server 啟動命令
+
+### VLA 主流程
+- `/vla/route_request`
+看你送出去的是 mp4 還是 live_camera
+`ros2 topic echo /vla/route_request`
+
+- `/vla/route_plan`
+看 Cosmos 產生的完整 mission JSON
+`ros2 topic echo /vla/route_plan`
+
+- `/vla/current_step`
+看現在走到第幾步、這一步要找什麼 landmark、Grounding DINO prompt 是什麼
+`ros2 topic echo /vla/current_step`
+- `/vla/mission_state`
+看 mission state、目前 step、last_reason、最近 inference
+`ros2 topic echo /vla/mission_state`
+- `/vla/inference_result`
+看 landmark evaluator 丟給 mission manager 的 step 判定結果
+`ros2 topic echo /vla/inference_result`
+
+#### Grounding DINO / Landmark
+- `/detections_output`
+看 Grounding DINO 原始 detection
+`ros2 topic echo /detections_output`
+- `/vla/landmark_detection`
+這是最重要的 landmark 結果，會有：
+target_landmark, found, score, bbox.cx, bbox.cy
+`ros2 topic echo /vla/landmark_detection`
+- `/annotated_image`
+看 bbox visualizer 畫出來的框、中心點、active landmark
+`ros2 topic echo /annotated_image`
+如果你用 Foxglove / RViz，這個 topic 最適合直接看影像。
+相機 / Live 檢查
+
+/camera/camera/color/image_raw
+確認 live camera 有沒有真的在出幀
+`ros2 topic hz /camera/camera/color/image_raw`
+如果你有開 webui / llm bridge
+- `/llm/video_uri`
+看目前 webui 或 bridge 用的是哪個影片
+`ros2 topic echo /llm/video_uri`
+- `/llm/status`
+看 webui/bridge 的狀態訊息
+`ros2 topic echo /llm/status`
+最常用的最小集合
+如果你只想抓最關鍵結果，訂這 5 個就夠：
+```bash
+ros2 topic echo /vla/route_plan
+ros2 topic echo /vla/current_step
+ros2 topic echo /vla/landmark_detection
+ros2 topic echo /vla/inference_result
+ros2 topic echo /vla/mission_state
+```

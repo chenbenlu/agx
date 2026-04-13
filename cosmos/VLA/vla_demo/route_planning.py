@@ -6,6 +6,21 @@ from .landmark_logic import landmark_display_name, normalize_grounding_prompt
 from .schemas import RouteRequestSpec, SchemaError
 from .topics import CAMERA_IMAGE_TOPIC
 
+PLACEHOLDER_VALUES = {
+    "",
+    "...",
+    "…",
+    "-",
+    "--",
+    "unknown",
+    "n/a",
+    "na",
+    "none",
+    "null",
+    "tbd",
+    "same as above",
+}
+
 
 def _optional_str(data: dict[str, Any], key: str) -> str:
     value = data.get(key)
@@ -25,6 +40,23 @@ def _optional_str_list(data: dict[str, Any], key: str) -> list[str]:
     return [item.strip() for item in value if item.strip()]
 
 
+def _is_placeholder_text(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in PLACEHOLDER_VALUES:
+        return True
+    if normalized.isdigit():
+        return True
+    return False
+
+
+def _meaningful_or_fallback(value: str, fallback: str) -> str:
+    return fallback if _is_placeholder_text(value) else value
+
+
+def _meaningful_list(values: list[str]) -> list[str]:
+    return [value for value in values if not _is_placeholder_text(value)]
+
+
 def coerce_route_plan_payload(
     raw_payload: dict[str, Any],
     request: RouteRequestSpec,
@@ -35,8 +67,11 @@ def coerce_route_plan_payload(
     if not isinstance(steps_raw, list) or not steps_raw:
         raise SchemaError("'steps' must be a non-empty list")
 
-    mission_text = _optional_str(raw_payload, "mission_text") or request.goal_text
-    camera_source = _optional_str(raw_payload, "camera_source") or request.camera_source
+    mission_text = _meaningful_or_fallback(
+        _optional_str(raw_payload, "mission_text"),
+        request.goal_text,
+    )
+    camera_source = request.camera_source
     if not camera_source:
         camera_source = CAMERA_IMAGE_TOPIC
 
@@ -46,13 +81,22 @@ def coerce_route_plan_payload(
             raise SchemaError("Each route plan step must be a JSON object")
         instruction = _optional_str(step_raw, "instruction")
         visual_goal = _optional_str(step_raw, "visual_goal")
+        if _is_placeholder_text(instruction):
+            raise SchemaError(f"Step {index} has placeholder 'instruction'")
+        if _is_placeholder_text(visual_goal):
+            raise SchemaError(f"Step {index} has placeholder 'visual_goal'")
         if not instruction:
             raise SchemaError(f"Step {index} is missing 'instruction'")
         if not visual_goal:
             raise SchemaError(f"Step {index} is missing 'visual_goal'")
-        expected_landmarks = _optional_str_list(step_raw, "expected_landmarks")
-        scene_description = _optional_str(step_raw, "scene_description") or visual_goal
+        expected_landmarks = _meaningful_list(_optional_str_list(step_raw, "expected_landmarks"))
+        scene_description = _meaningful_or_fallback(
+            _optional_str(step_raw, "scene_description"),
+            visual_goal,
+        )
         primary_landmark = _optional_str(step_raw, "primary_landmark")
+        if _is_placeholder_text(primary_landmark):
+            primary_landmark = ""
         if not primary_landmark:
             if expected_landmarks:
                 primary_landmark = expected_landmarks[0]
@@ -91,11 +135,10 @@ def coerce_route_plan_payload(
         raise SchemaError("'inference_interval_sec' must be numeric")
 
     return {
-        "mission_id": _optional_str(raw_payload, "mission_id") or request.mission_id,
+        "mission_id": request.mission_id,
         "mission_text": mission_text,
-        "environment_id": _optional_str(raw_payload, "environment_id")
-        or request.environment_id,
+        "environment_id": request.environment_id,
         "camera_source": camera_source,
-        "inference_interval_sec": float(inference_interval_sec),
+        "inference_interval_sec": float(request.inference_interval_sec),
         "steps": normalized_steps,
     }

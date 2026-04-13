@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 import json
 from pathlib import Path
+import shutil
 import tempfile
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -21,7 +22,13 @@ from .json_utils import dumps_json, extract_json_object, loads_json
 from .prompting import build_route_planner_prompt
 from .route_planning import coerce_route_plan_payload
 from .schemas import MissionSpec, RouteRequestSpec, SchemaError
-from .topics import CAMERA_IMAGE_TOPIC, ROUTE_PLAN_TOPIC, ROUTE_REQUEST_TOPIC, SET_MISSION_TOPIC
+from .topics import (
+    CAMERA_IMAGE_TOPIC,
+    ROUTE_BUFFER_STATUS_TOPIC,
+    ROUTE_PLAN_TOPIC,
+    ROUTE_REQUEST_TOPIC,
+    SET_MISSION_TOPIC,
+)
 
 VIDEO_SUFFIXES = {".avi", ".mkv", ".mov", ".mp4", ".webm"}
 IMAGE_SUFFIXES = {".bmp", ".jpeg", ".jpg", ".png", ".webp"}
@@ -244,6 +251,7 @@ class RoutePlannerNode(Node):
         self.shared_media_dir.mkdir(parents=True, exist_ok=True)
 
         self.route_plan_pub = self.create_publisher(String, ROUTE_PLAN_TOPIC, 10)
+        self.route_buffer_status_pub = self.create_publisher(String, ROUTE_BUFFER_STATUS_TOPIC, 10)
         self.set_mission_pub = self.create_publisher(String, SET_MISSION_TOPIC, 10)
         self.create_subscription(String, ROUTE_REQUEST_TOPIC, self._on_route_request, 10)
         self.create_timer(0.2, self._on_pending_live_request_timer)
@@ -292,6 +300,14 @@ class RoutePlannerNode(Node):
                 if not self._has_buffered_live_frames(request):
                     self.pending_live_request = request
                     self.pending_live_request_started_at = self._now()
+                    self._publish_route_buffer_status(
+                        self._build_route_buffer_status(
+                            request,
+                            status="warming_up",
+                            message="Waiting for buffered live frames.",
+                            window_start=self._window_start(request),
+                        )
+                    )
                     self.get_logger().info(
                         "Queued live route request until camera buffer is ready: "
                         f"{request.mission_id} on {request.camera_source}"
@@ -300,6 +316,17 @@ class RoutePlannerNode(Node):
             else:
                 self.pending_live_request = None
                 self.pending_live_request_started_at = 0.0
+                self._publish_route_buffer_status(
+                    {
+                        "mission_id": request.mission_id,
+                        "source_mode": request.source_mode,
+                        "status": "inactive",
+                        "camera_source": request.camera_source,
+                        "video_uri": request.video_uri,
+                        "message": "Route planner is using video_file input directly.",
+                        "updated_at": self._now(),
+                    }
+                )
             self._execute_route_request(request)
         except (OSError, RuntimeError, SchemaError, ValueError) as exc:
             self.get_logger().error(f"Route planning failed: {exc}")
@@ -320,9 +347,18 @@ class RoutePlannerNode(Node):
         now = self._now()
         timeout_sec = float(self.get_parameter("live_request_warmup_timeout_sec").value)
         if (now - self.pending_live_request_started_at) > timeout_sec:
+            diagnostics = self._buffer_diagnostics(request)
+            self._publish_route_buffer_status(
+                self._build_route_buffer_status(
+                    request,
+                    status="timeout",
+                    message=diagnostics,
+                    window_start=self._window_start(request),
+                )
+            )
             self.get_logger().error(
                 "Route planning failed: "
-                f"{self._buffer_diagnostics(request)}"
+                f"{diagnostics}"
             )
             self.pending_live_request = None
             self.pending_live_request_started_at = 0.0
@@ -374,7 +410,23 @@ class RoutePlannerNode(Node):
         if len(frames) == 1:
             path = temp_root / "frame.jpg"
             cv2.imwrite(str(path), frames[-1][1])
-            return "--images", str(path)
+            persisted_path = self.shared_media_dir / "latest_live_buffer.jpg"
+            shutil.copy2(path, persisted_path)
+            self._publish_route_buffer_status(
+                self._build_route_buffer_status(
+                    request,
+                    status="ready",
+                    message="Latest live buffer frame is ready.",
+                    media_type="image",
+                    frame_count=1,
+                    fps=self._estimate_fps([stamp for stamp, _ in frames]),
+                    buffer_start_stamp=frames[0][0],
+                    buffer_end_stamp=frames[-1][0],
+                    local_path=str(persisted_path),
+                    file_uri=persisted_path.resolve().as_uri(),
+                )
+            )
+            return "--images", str(persisted_path)
 
         path = temp_root / "clip.mp4"
         height, width = frames[0][1].shape[:2]
@@ -388,7 +440,23 @@ class RoutePlannerNode(Node):
         for _, frame in frames:
             writer.write(frame)
         writer.release()
-        return "--videos", str(path)
+        persisted_path = self.shared_media_dir / "latest_live_buffer.mp4"
+        shutil.copy2(path, persisted_path)
+        self._publish_route_buffer_status(
+            self._build_route_buffer_status(
+                request,
+                status="ready",
+                message="Latest live buffer clip is ready.",
+                media_type="video",
+                frame_count=len(frames),
+                fps=fps,
+                buffer_start_stamp=frames[0][0],
+                buffer_end_stamp=frames[-1][0],
+                local_path=str(persisted_path),
+                file_uri=persisted_path.resolve().as_uri(),
+            )
+        )
+        return "--videos", str(persisted_path)
 
     def _estimate_fps(self, stamps: list[float]) -> float:
         if len(stamps) < 2:
@@ -406,8 +474,7 @@ class RoutePlannerNode(Node):
         return max(1.0, 1.0 / average_interval)
 
     def _buffered_live_frames(self, request: RouteRequestSpec) -> list[tuple[float, Any]]:
-        now = self._now()
-        window_start = now - float(request.clip_duration_sec)
+        window_start = self._window_start(request)
         return [
             (stamp, frame)
             for stamp, frame in self.frame_buffer
@@ -418,8 +485,7 @@ class RoutePlannerNode(Node):
         return bool(self._buffered_live_frames(request))
 
     def _buffer_diagnostics(self, request: RouteRequestSpec) -> str:
-        now = self._now()
-        window_start = now - float(request.clip_duration_sec)
+        window_start = self._window_start(request)
         return (
             "No buffered frames available on "
             f"{request.camera_source} for live route planning "
@@ -428,6 +494,37 @@ class RoutePlannerNode(Node):
             f"last_frame_stamp={self.last_frame_stamp:.3f}, "
             f"window_start={window_start:.3f})"
         )
+
+    def _build_route_buffer_status(
+        self,
+        request: RouteRequestSpec,
+        *,
+        status: str,
+        message: str,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        payload = {
+            "mission_id": request.mission_id,
+            "source_mode": request.source_mode,
+            "status": status,
+            "camera_source": request.camera_source,
+            "clip_duration_sec": float(request.clip_duration_sec),
+            "frames_received": self.frames_received,
+            "buffer_size": len(self.frame_buffer),
+            "last_frame_stamp": round(self.last_frame_stamp, 3),
+            "updated_at": round(self._now(), 3),
+            "message": message,
+        }
+        payload.update(extra)
+        return payload
+
+    def _publish_route_buffer_status(self, payload: dict[str, Any]) -> None:
+        msg = String()
+        msg.data = dumps_json(payload)
+        self.route_buffer_status_pub.publish(msg)
+
+    def _window_start(self, request: RouteRequestSpec) -> float:
+        return self._now() - float(request.clip_duration_sec)
 
     def _resolve_uri(self, video_uri: str) -> str:
         parsed = urlparse(video_uri)

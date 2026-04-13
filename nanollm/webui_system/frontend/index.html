@@ -37,20 +37,32 @@
     }
 
     .wrap {
-      max-width: 1460px;
+      max-width: 1760px;
       margin: 0 auto;
-      padding: 24px;
+      padding: 28px;
       display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 24px;
+      grid-template-columns: minmax(460px, 0.98fr) minmax(0, 1.42fr);
+      gap: 28px;
+      align-items: start;
       min-height: 100vh;
+    }
+
+    .wrap>* {
+      min-width: 0;
     }
 
     .card {
       background: var(--card);
       border-radius: 24px;
       box-shadow: var(--shadow);
-      padding: 20px;
+      padding: 24px;
+      min-width: 0;
+    }
+
+    .right-stack {
+      display: grid;
+      gap: 24px;
+      min-width: 0;
     }
 
     .title {
@@ -68,9 +80,13 @@
 
     .toolbar {
       display: flex;
-      gap: 10px;
-      margin-bottom: 14px;
+      gap: 12px;
+      margin-bottom: 16px;
       flex-wrap: wrap;
+    }
+
+    .toolbar button {
+      flex: 1 1 180px;
     }
 
     button,
@@ -84,6 +100,7 @@
     button {
       padding: 12px 16px;
       font-weight: 700;
+      min-height: 48px;
     }
 
     .btn-main {
@@ -101,10 +118,14 @@
       border-radius: 24px;
       overflow: hidden;
       background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      min-height: clamp(620px, 76vh, 900px);
     }
 
     .messages {
-      height: 58vh;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-y: auto;
       padding: 18px;
       display: flex;
@@ -156,6 +177,11 @@
       padding: 14px;
       border-top: 1px solid var(--line);
       background: white;
+      align-items: center;
+    }
+
+    .input-bar input {
+      flex: 1 1 auto;
     }
 
     input,
@@ -180,7 +206,7 @@
     .status-block {
       border-radius: 18px;
       padding: 16px;
-      margin-bottom: 14px;
+      min-width: 0;
     }
 
     .status-blue {
@@ -203,6 +229,7 @@
       margin: 6px 0;
       font-size: 14px;
       line-height: 1.6;
+      word-break: break-word;
     }
 
     .log {
@@ -232,9 +259,9 @@
     }
 
     .advanced-area {
-      max-width: 1460px;
+      max-width: 1760px;
       margin: 0 auto 24px auto;
-      padding: 0 24px 24px 24px;
+      padding: 0 28px 28px 28px;
     }
 
     details {
@@ -253,7 +280,10 @@
     }
 
     .grid2,
-    .grid3 {
+    .grid3,
+    .summary-grid,
+    .info-grid,
+    .json-grid {
       display: grid;
       gap: 16px;
       margin-top: 16px;
@@ -296,17 +326,79 @@
       line-height: 1.5;
     }
 
-    @media (max-width: 1120px) {
+    .summary-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .info-grid {
+      grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+    }
+
+    .json-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .preview-shell {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #0f172a;
+      min-height: 220px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .buffer-preview {
+      display: block;
+      width: 100%;
+      max-height: 340px;
+      background: #020617;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .empty-preview {
+      padding: 18px;
+      color: #cbd5e1;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .path-line {
+      color: var(--muted);
+      font-family: monospace;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    @media (max-width: 1480px) {
+      .summary-grid,
+      .info-grid,
+      .json-grid,
+      .grid3 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 1180px) {
       .wrap {
         grid-template-columns: 1fr;
       }
 
       .messages {
-        height: 50vh;
+        min-height: 440px;
       }
 
       .grid2,
-      .grid3 {
+      .grid3,
+      .summary-grid,
+      .info-grid,
+      .json-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -335,49 +427,67 @@
       </div>
     </div>
 
-    <div>
+    <div class="right-stack">
       <div class="card">
         <div class="panel-title">任務與導航摘要</div>
 
-        <div class="status-block status-blue">
-          <div><strong>最近任務</strong></div>
-          <div class="kv" id="taskAsset">設備：-</div>
-          <div class="kv" id="taskLocation">目標地點：-</div>
-          <div class="kv" id="taskRouteId">Route Request：-</div>
-          <div class="kv" id="taskSourceMode">來源模式：-</div>
+        <div class="summary-grid">
+          <div class="status-block status-blue">
+            <div><strong>最近任務</strong></div>
+            <div class="kv" id="taskAsset">設備：-</div>
+            <div class="kv" id="taskLocation">目標地點：-</div>
+            <div class="kv" id="taskRouteId">Route Request：-</div>
+            <div class="kv" id="taskSourceMode">來源模式：-</div>
+          </div>
+
+          <div class="status-block status-green">
+            <div><strong>Mission 進度</strong></div>
+            <div class="kv" id="missionId">mission_id：-</div>
+            <div class="kv" id="missionState">mission_state：-</div>
+            <div class="kv" id="currentStep">current_step：-</div>
+            <div class="kv" id="lastReason">last_reason：-</div>
+          </div>
+
+          <div class="status-block status-yellow">
+            <div><strong>Landmark Detection</strong></div>
+            <div class="kv" id="landmarkTarget">target_landmark：-</div>
+            <div class="kv" id="landmarkFound">found：-</div>
+            <div class="kv" id="landmarkScore">score：-</div>
+            <div class="kv" id="landmarkCenter">center：-</div>
+          </div>
+
+          <div class="status-block status-slate">
+            <div><strong>Live Buffer 預覽</strong></div>
+            <div class="kv" id="bufferState">buffer_state：-</div>
+            <div class="kv" id="bufferFrames">frames / fps：-</div>
+            <div class="kv" id="bufferWindow">window：-</div>
+            <div class="path-line" id="bufferPath">path：-</div>
+            <div class="preview-shell">
+              <div id="bufferPreviewEmpty" class="empty-preview">尚未生成 live buffer。送出 `live_camera` route request 後，這裡會顯示最近一段 clip。</div>
+              <video id="bufferVideo" class="buffer-preview hidden" controls muted playsinline></video>
+              <img id="bufferImage" class="buffer-preview hidden" alt="Latest live buffer frame" />
+            </div>
+          </div>
         </div>
 
-        <div class="status-block status-green">
-          <div><strong>Mission 進度</strong></div>
-          <div class="kv" id="missionId">mission_id：-</div>
-          <div class="kv" id="missionState">mission_state：-</div>
-          <div class="kv" id="currentStep">current_step：-</div>
-          <div class="kv" id="lastReason">last_reason：-</div>
-        </div>
+        <div class="info-grid">
+          <div class="status-block status-slate">
+            <div><strong>ROS2 Topics</strong></div>
+            <div class="kv">/llm/request / /llm/response / /llm/status</div>
+            <div class="kv">/llm/system_prompt / /llm/video_uri / /llm/event_flag</div>
+            <div class="kv">/vla/route_request / /vla/route_plan / /vla/current_step</div>
+            <div class="kv">/vla/landmark_detection / /vla/mission_state</div>
+            <div class="kv">/vla/route_buffer_status</div>
+          </div>
 
-        <div class="status-block status-yellow">
-          <div><strong>Landmark Detection</strong></div>
-          <div class="kv" id="landmarkTarget">target_landmark：-</div>
-          <div class="kv" id="landmarkFound">found：-</div>
-          <div class="kv" id="landmarkScore">score：-</div>
-          <div class="kv" id="landmarkCenter">center：-</div>
-        </div>
-
-        <div class="status-block status-slate">
-          <div><strong>ROS2 Topics</strong></div>
-          <div class="kv">/llm/request / /llm/response / /llm/status</div>
-          <div class="kv">/llm/system_prompt / /llm/video_uri / /llm/event_flag</div>
-          <div class="kv">/vla/route_request / /vla/route_plan / /vla/current_step</div>
-          <div class="kv">/vla/landmark_detection / /vla/mission_state</div>
-        </div>
-
-        <div class="status-block status-blue">
-          <div><strong>最新狀態</strong></div>
-          <div class="kv" id="latestStatus">狀態：待命中</div>
+          <div class="status-block status-blue">
+            <div><strong>最新狀態</strong></div>
+            <div class="kv" id="latestStatus">狀態：待命中</div>
+          </div>
         </div>
       </div>
 
-      <div class="card" style="margin-top: 24px;">
+      <div class="card">
         <div class="panel-title">即時紀錄</div>
         <div id="log" class="log"></div>
       </div>
@@ -433,7 +543,7 @@
         </div>
       </div>
 
-      <div class="grid2">
+      <div class="json-grid">
         <div>
           <div class="panel-title">Route Plan</div>
           <div id="routePlanView" class="json-box">{}</div>
@@ -449,6 +559,10 @@
         <div>
           <div class="panel-title">Mission State</div>
           <div id="missionStateView" class="json-box">{}</div>
+        </div>
+        <div>
+          <div class="panel-title">Route Buffer Status</div>
+          <div id="routeBufferView" class="json-box">{}</div>
         </div>
       </div>
     </details>
@@ -482,11 +596,19 @@
     const landmarkScoreEl = document.getElementById("landmarkScore");
     const landmarkCenterEl = document.getElementById("landmarkCenter");
     const latestStatusEl = document.getElementById("latestStatus");
+    const bufferStateEl = document.getElementById("bufferState");
+    const bufferFramesEl = document.getElementById("bufferFrames");
+    const bufferWindowEl = document.getElementById("bufferWindow");
+    const bufferPathEl = document.getElementById("bufferPath");
+    const bufferPreviewEmptyEl = document.getElementById("bufferPreviewEmpty");
+    const bufferVideoEl = document.getElementById("bufferVideo");
+    const bufferImageEl = document.getElementById("bufferImage");
 
     const routePlanView = document.getElementById("routePlanView");
     const currentStepView = document.getElementById("currentStepView");
     const landmarkView = document.getElementById("landmarkView");
     const missionStateView = document.getElementById("missionStateView");
+    const routeBufferView = document.getElementById("routeBufferView");
 
     function appendLog(text) {
       const line = document.createElement("div");
@@ -523,10 +645,65 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    function setBufferPreviewState(message) {
+      bufferVideoEl.pause();
+      bufferVideoEl.removeAttribute("src");
+      bufferVideoEl.load();
+      bufferVideoEl.classList.add("hidden");
+      bufferImageEl.removeAttribute("src");
+      bufferImageEl.classList.add("hidden");
+      bufferPreviewEmptyEl.textContent = message;
+      bufferPreviewEmptyEl.classList.remove("hidden");
+    }
+
+    function renderBufferStatus(payload) {
+      routeBufferView.textContent = pretty(payload);
+
+      const status = payload?.status || "-";
+      const frameCount = payload?.frame_count ?? "-";
+      const fps = payload?.fps == null ? "-" : Number(payload.fps).toFixed(2);
+      const startStamp = payload?.buffer_start_stamp == null ? "-" : Number(payload.buffer_start_stamp).toFixed(3);
+      const endStamp = payload?.buffer_end_stamp == null ? "-" : Number(payload.buffer_end_stamp).toFixed(3);
+
+      bufferStateEl.textContent = `buffer_state：${status}`;
+      bufferFramesEl.textContent = `frames / fps：${frameCount} / ${fps}`;
+      bufferWindowEl.textContent = `window：${startStamp} -> ${endStamp}`;
+      bufferPathEl.textContent = `path：${payload?.local_path || payload?.message || "-"}`;
+
+      if (payload?.status !== "ready" || !payload?.local_path) {
+        if (payload?.status === "inactive") {
+          setBufferPreviewState("目前是 video_file 模式，live buffer 預覽未啟用。");
+        } else {
+          setBufferPreviewState(payload?.message || "live buffer 尚未就緒。");
+        }
+        return;
+      }
+
+      const previewUrl = `/api/route_buffer/latest?ts=${Date.now()}`;
+      bufferPreviewEmptyEl.classList.add("hidden");
+
+      if (payload?.media_type === "image") {
+        bufferVideoEl.pause();
+        bufferVideoEl.removeAttribute("src");
+        bufferVideoEl.load();
+        bufferVideoEl.classList.add("hidden");
+        bufferImageEl.src = previewUrl;
+        bufferImageEl.classList.remove("hidden");
+        return;
+      }
+
+      bufferImageEl.removeAttribute("src");
+      bufferImageEl.classList.add("hidden");
+      bufferVideoEl.src = previewUrl;
+      bufferVideoEl.classList.remove("hidden");
+      bufferVideoEl.load();
+    }
+
     function clearChat() {
       messagesEl.innerHTML = "";
       addMessage("ai", "系統待命中。輸入任務後會同時送出 Route Request，並在右側顯示 route_plan、current_step 與 landmark_detection。", "System");
       appendLog("chat cleared");
+      setBufferPreviewState("尚未生成 live buffer。送出 `live_camera` route request 後，這裡會顯示最近一段 clip。");
     }
 
     function getRoutePayload() {
@@ -701,6 +878,9 @@
           lastReasonEl.textContent = `last_reason：${data.payload?.last_reason || "-"}`;
           missionIdEl.textContent = `mission_id：${data.payload?.mission_id || "-"}`;
           appendLog(`mission_state -> ${data.payload?.mission_state || "-"}`);
+        } else if (data.type === "route_buffer_status") {
+          renderBufferStatus(data.payload || {});
+          appendLog(`route_buffer_status -> ${JSON.stringify(data.payload)}`);
         }
       };
 

@@ -83,6 +83,69 @@ class LandmarkPipelineTest(unittest.TestCase):
         self.assertEqual(mission.steps[1].primary_landmark, "freight elevator")
         self.assertEqual(mission.steps[1].grounding_prompt, "freight elevator.")
 
+    def test_coerce_route_plan_rejects_placeholder_step_content(self) -> None:
+        request = RouteRequestSpec.from_dict(
+            {
+                "mission_id": "route_live_demo",
+                "goal_text": "離開室內區域",
+                "environment_id": "hallway_9f",
+                "source_mode": "live_camera",
+                "camera_source": "/camera/camera/color/image_raw",
+            }
+        )
+        with self.assertRaisesRegex(Exception, "placeholder"):
+            coerce_route_plan_payload(
+                {
+                    "mission_id": "1",
+                    "mission_text": "...",
+                    "environment_id": "unknown",
+                    "camera_source": "unknown",
+                    "inference_interval_sec": 1.0,
+                    "steps": [
+                        {
+                            "step_id": 1,
+                            "instruction": "...",
+                            "visual_goal": "...",
+                        }
+                    ],
+                },
+                request,
+            )
+
+    def test_coerce_route_plan_uses_request_identity_fields(self) -> None:
+        request = RouteRequestSpec.from_dict(
+            {
+                "mission_id": "route_live_demo",
+                "goal_text": "離開室內區域",
+                "environment_id": "hallway_9f",
+                "source_mode": "live_camera",
+                "camera_source": "/camera/camera/color/image_raw",
+                "inference_interval_sec": 1.5,
+            }
+        )
+        payload = coerce_route_plan_payload(
+            {
+                "mission_id": "1",
+                "mission_text": "...",
+                "environment_id": "unknown",
+                "camera_source": "unknown",
+                "inference_interval_sec": 1.0,
+                "steps": [
+                    {
+                        "step_id": 1,
+                        "instruction": "離開室內門口，往前走向明亮區域",
+                        "visual_goal": "前方出口或較明亮的通道清楚可見",
+                    }
+                ],
+            },
+            request,
+        )
+        self.assertEqual(payload["mission_id"], "route_live_demo")
+        self.assertEqual(payload["environment_id"], "hallway_9f")
+        self.assertEqual(payload["camera_source"], "/camera/camera/color/image_raw")
+        self.assertEqual(payload["inference_interval_sec"], 1.5)
+        self.assertEqual(payload["mission_text"], "離開室內區域")
+
 
 if __name__ == "__main__":
     unittest.main()

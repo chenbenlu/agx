@@ -245,6 +245,7 @@ class RoutePlannerNode(Node):
         self.camera_topic = ""
         self.frames_received = 0
         self.last_frame_stamp = 0.0
+        self.last_source_frame_stamp = 0.0
         self.pending_live_request: RouteRequestSpec | None = None
         self.pending_live_request_started_at = 0.0
         self.shared_media_dir = Path(str(self.get_parameter("shared_media_dir").value))
@@ -270,6 +271,7 @@ class RoutePlannerNode(Node):
         self.frame_buffer.clear()
         self.frames_received = 0
         self.last_frame_stamp = 0.0
+        self.last_source_frame_stamp = 0.0
         self.camera_topic = normalized_topic
         self.camera_subscription = self.create_subscription(
             Image,
@@ -281,14 +283,16 @@ class RoutePlannerNode(Node):
 
     def _on_image(self, msg: Image) -> None:
         frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
-        if stamp <= 0:
-            stamp = self._now()
-        self.frame_buffer.append((stamp, frame))
+        source_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
+        received_at = self._now()
+        if source_stamp <= 0:
+            source_stamp = received_at
+        self.frame_buffer.append((received_at, frame))
         self.frames_received += 1
-        self.last_frame_stamp = stamp
+        self.last_frame_stamp = received_at
+        self.last_source_frame_stamp = source_stamp
         max_buffer_sec = float(self.get_parameter("max_buffer_sec").value)
-        while self.frame_buffer and (stamp - self.frame_buffer[0][0]) > max_buffer_sec:
+        while self.frame_buffer and (received_at - self.frame_buffer[0][0]) > max_buffer_sec:
             self.frame_buffer.popleft()
 
     def _on_route_request(self, msg: String) -> None:
@@ -512,6 +516,7 @@ class RoutePlannerNode(Node):
             "frames_received": self.frames_received,
             "buffer_size": len(self.frame_buffer),
             "last_frame_stamp": round(self.last_frame_stamp, 3),
+            "last_source_frame_stamp": round(self.last_source_frame_stamp, 3),
             "updated_at": round(self._now(), 3),
             "message": message,
         }

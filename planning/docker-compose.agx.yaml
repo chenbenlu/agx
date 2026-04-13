@@ -1,6 +1,7 @@
 services:
   planning:
     network_mode: host
+    ipc: host
     runtime: nvidia
 
     # Jetson Tegra 核心缺少 hid_sensor_custom 模組，

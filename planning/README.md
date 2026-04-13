@@ -106,7 +106,9 @@ ros2 run nav2_map_server map_saver_cli -f /root/ros2_ws/src/car_control/config/m
 #### 5. Nav2 導航
 ```bash
 ros2 launch car_control nav2_bringup.launch.py \
-  map:=/root/ros2_ws/src/car_control/config/my_map.yaml
+map:=/abs/path/other.yaml\
+params_file:=/abs/path/override.yaml
+
 ```
 
 ---

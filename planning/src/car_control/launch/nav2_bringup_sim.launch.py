@@ -5,7 +5,8 @@ Nav2 導航啟動檔  【Isaac Sim 模擬環境專用】
 
 架構說明：
     引入 nav2_bringup.launch.py，固定 use_sim_time=true，
-    載入 sim 專用參數檔 nav2_params_sim.yaml。
+    覆寫 override 檔為 nav2_params_sim.yaml（由 nav2_bringup.launch.py
+    與 nav2_params_base.yaml 深度合併）。
 
     搭配 car_sensor_sim.launch.py 使用：
         Terminal 1: ros2 launch car_control car_sensor_sim.launch.py
@@ -27,8 +28,9 @@ def generate_launch_description():
 
     pkg = get_package_share_directory('car_control')
 
-    # sim 專用參數檔 — 所有節點的 use_sim_time 已設為 True
+    # sim override — 與 nav2_params_base.yaml 深度合併
     sim_params = os.path.join(pkg, 'config', 'nav2_params_sim.yaml')
+    sim_map = os.path.join(pkg, 'config', 'sim_map.yaml')
 
     # ==========================================================
     #  全域注入 use_sim_time=true
@@ -44,6 +46,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             'use_sim_time': 'true',
+            'map': sim_map,
             'params_file': sim_params,
         }.items(),
     )

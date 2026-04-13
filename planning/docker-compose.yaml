@@ -8,8 +8,6 @@ services:
       dockerfile: Dockerfile
     image: agx_ros/planning:latest
     container_name: planning
-    ipc: host
-    pid: host
 
     environment:
       - NVIDIA_VISIBLE_DEVICES=all

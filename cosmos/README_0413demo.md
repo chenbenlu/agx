@@ -196,7 +196,20 @@ docker exec -it nanollm bash
 cd /data/webui_system
 uvicorn backend.app:app --host 0.0.0.0 --port 8089
 ```
+
+#### 目前策略:
+#### nanollm 不直接呼叫 /set_prompt
+#### nanollm 只發布一般 ROS topic，例如 /vla/current_step
+#### vlm 裡的 landmark_locator_node.py (line 58) 訂閱 /vla/current_step
+#### 然後由 vlm 本地去呼叫 isaac_ros_grounding_dino_interfaces/srv/SetPrompt：
+#### landmark_locator_node.py (line 50) 到 landmark_locator_node.py (line 99)
+#### 所以架構上是：
+#### nanollm：任務/mission orchestration
+#### vlm：Isaac ROS / Grounding DINO 相依、/set_prompt service client
+
+
 #### [ERROR] [vla_route_planner]: Route planning failed: No buffered frames available on /camera/camera/color/image_raw for live route planning, 使用live會出現這樣的錯誤
 把 route_planner_node.py 改成：
 用 qos_profile_sensor_data 訂閱 /camera/camera/color/image_raw
 補上 frames_received / buffer_size / last_frame_stamp /
+

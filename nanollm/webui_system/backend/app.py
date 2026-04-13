@@ -72,13 +72,22 @@ def extract_location(text: str) -> str:
         return match.group(1).strip()
 
     return "未指定區域"
-
+def pick_asset(text: str) -> str:
+    if any(keyword in text for keyword in ["巡檢", "空拍", "俯視", "查看上方"]):
+        return "UAV"
+    if any(keyword in text for keyword in ["前往", "走過去", "到現場", "派遣地面車"]):
+        return "UGV"
+    return "UGV"
 
 
 def build_fixed_reply(user_text: str) -> dict[str, str]:
     location = extract_location(user_text)
-    reply = f"任務啟動"
+    asset = pick_asset(user_text)
+    reply = f"任務啟動，出動設備：{asset}，地點：{location}"
     return {
+        "raw_text": user_text,
+        "asset": asset,
+        "target_location": location,
         "reply": reply,
     }
 
@@ -585,28 +594,24 @@ async def api_command(req: CommandRequest):
         return {"ok": False, "error": "empty text"}
 
     result = ros_node.handle_user_command(text)
+    task_payload = {
+        "asset": result.get("asset", "UGV"),
+        "target_location": result.get("target_location", extract_location(text)),
+        "route_request_id": result["route_request"]["mission_id"],
+        "source_mode": result["route_request"]["source_mode"],
+    }
 
     await manager.broadcast_json(
         {
             "type": "task",
-            "task": {
-                "asset": result["asset"],
-                "target_location": result["target_location"],
-                "route_request_id": result["route_request"]["mission_id"],
-                "source_mode": result["route_request"]["source_mode"],
-            },
+            "task": task_payload,
         }
     )
 
     return {
         "ok": True,
         "reply": result["reply"],
-        "task": {
-            "asset": result["asset"],
-            "target_location": result["target_location"],
-            "route_request_id": result["route_request"]["mission_id"],
-            "source_mode": result["route_request"]["source_mode"],
-        },
+        "task": task_payload,
         "route_request": result["route_request"],
     }
 

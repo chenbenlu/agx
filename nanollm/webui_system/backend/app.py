@@ -73,11 +73,9 @@ def extract_location(text: str) -> str:
 
     return "未指定區域"
 def pick_asset(text: str) -> str:
-    if any(keyword in text for keyword in ["巡檢", "空拍", "俯視", "查看上方"]):
-        return "UAV"
     if any(keyword in text for keyword in ["前往", "走過去", "到現場", "派遣地面車"]):
-        return "UGV"
-    return "UGV"
+        return "AMR"
+    return "AMR"
 
 
 def build_fixed_reply(user_text: str) -> dict[str, str]:

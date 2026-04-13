@@ -4,6 +4,7 @@ from collections import deque
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -226,6 +227,7 @@ class RoutePlannerNode(Node):
         self.declare_parameter("max_buffer_sec", 20.0)
         self.declare_parameter("video_fps_fallback", 8.0)
         self.declare_parameter("live_request_warmup_timeout_sec", 5.0)
+        self.declare_parameter("live_buffer_ready_ratio", 0.85)
         self.declare_parameter("shared_media_dir", "/workspaces/vla_route_media")
 
         backend_mode = str(self.get_parameter("backend_mode").value)
@@ -432,7 +434,7 @@ class RoutePlannerNode(Node):
             )
             return "--images", str(persisted_path)
 
-        path = temp_root / "clip.mp4"
+        path = temp_root / "clip_raw.mp4"
         height, width = frames[0][1].shape[:2]
         fps = self._estimate_fps([stamp for stamp, _ in frames])
         writer = cv2.VideoWriter(
@@ -445,7 +447,7 @@ class RoutePlannerNode(Node):
             writer.write(frame)
         writer.release()
         persisted_path = self.shared_media_dir / "latest_live_buffer.mp4"
-        shutil.copy2(path, persisted_path)
+        self._encode_previewable_mp4(path, persisted_path)
         self._publish_route_buffer_status(
             self._build_route_buffer_status(
                 request,
@@ -454,6 +456,8 @@ class RoutePlannerNode(Node):
                 media_type="video",
                 frame_count=len(frames),
                 fps=fps,
+                buffer_span_sec=round(self._buffer_span_sec(frames), 3),
+                required_buffer_span_sec=round(self._required_buffer_span_sec(request), 3),
                 buffer_start_stamp=frames[0][0],
                 buffer_end_stamp=frames[-1][0],
                 local_path=str(persisted_path),
@@ -486,7 +490,10 @@ class RoutePlannerNode(Node):
         ]
 
     def _has_buffered_live_frames(self, request: RouteRequestSpec) -> bool:
-        return bool(self._buffered_live_frames(request))
+        frames = self._buffered_live_frames(request)
+        if not frames:
+            return False
+        return self._buffer_span_sec(frames) >= self._required_buffer_span_sec(request)
 
     def _buffer_diagnostics(self, request: RouteRequestSpec) -> str:
         window_start = self._window_start(request)
@@ -496,6 +503,9 @@ class RoutePlannerNode(Node):
             f"(frames_received={self.frames_received}, "
             f"buffer_size={len(self.frame_buffer)}, "
             f"last_frame_stamp={self.last_frame_stamp:.3f}, "
+            f"last_source_frame_stamp={self.last_source_frame_stamp:.3f}, "
+            f"buffer_span_sec={self._buffer_span_sec(self._buffered_live_frames(request)):.3f}, "
+            f"required_buffer_span_sec={self._required_buffer_span_sec(request):.3f}, "
             f"window_start={window_start:.3f})"
         )
 
@@ -530,6 +540,50 @@ class RoutePlannerNode(Node):
 
     def _window_start(self, request: RouteRequestSpec) -> float:
         return self._now() - float(request.clip_duration_sec)
+
+    def _buffer_span_sec(self, frames: list[tuple[float, Any]]) -> float:
+        if len(frames) < 2:
+            return 0.0
+        return max(0.0, frames[-1][0] - frames[0][0])
+
+    def _required_buffer_span_sec(self, request: RouteRequestSpec) -> float:
+        clip_duration = float(request.clip_duration_sec)
+        ratio = float(self.get_parameter("live_buffer_ready_ratio").value)
+        return min(clip_duration, max(0.5, clip_duration * ratio))
+
+    def _encode_previewable_mp4(self, input_path: Path, output_path: Path) -> None:
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is None:
+            shutil.copy2(input_path, output_path)
+            return
+
+        command = [
+            ffmpeg_path,
+            "-y",
+            "-i",
+            str(input_path),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            self.get_logger().warn(
+                f"Failed to encode browser-friendly live buffer mp4, falling back to raw copy: {exc}"
+            )
+            shutil.copy2(input_path, output_path)
 
     def _resolve_uri(self, video_uri: str) -> str:
         parsed = urlparse(video_uri)

@@ -40,7 +40,8 @@ RUN pip3 install --no-cache-dir \
     timm \
     accelerate \
     pyyaml \
-    uvicorn[standard]
+    uvicorn[standard] \
+    fastapi
 
 # 安裝 CLIP (ftfy 和 regex 是相依套件)
 RUN pip3 install --no-cache-dir ftfy regex

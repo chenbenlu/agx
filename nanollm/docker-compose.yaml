@@ -50,6 +50,7 @@ services:
       - /home/systemlabagx/disk/workspaces:/workspaces
       - /home/systemlabagx/disk/agx/nanollm/bridge_ws:/data/bridge_ws
       - /home/systemlabagx/disk/agx/nanollm/webui_system:/data/webui_system
+      - /home/systemlabagx/disk/agx/cosmos/VLA:/opt/vla_demo
       
     devices:
       - /dev/snd

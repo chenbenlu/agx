@@ -84,3 +84,4 @@ env/
 # Claude Code
 tmpclaude-*
 .claude/settings.local.json
+.codex

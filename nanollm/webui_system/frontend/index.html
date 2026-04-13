@@ -609,6 +609,12 @@
     const landmarkView = document.getElementById("landmarkView");
     const missionStateView = document.getElementById("missionStateView");
     const routeBufferView = document.getElementById("routeBufferView");
+    const chatEventCache = {
+      routePlanKey: "",
+      currentStepKey: "",
+      missionStateKey: "",
+      landmarkKey: "",
+    };
 
     function appendLog(text) {
       const line = document.createElement("div");
@@ -643,6 +649,53 @@
       row.appendChild(bubble);
       messagesEl.appendChild(row);
       messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function summarizeRoutePlan(payload) {
+      const steps = Array.isArray(payload?.steps) ? payload.steps : [];
+      const lines = [
+        `VLA 已完成路徑規劃，mission：${payload?.mission_id || "-"}`,
+        `總步數：${steps.length}`,
+      ];
+
+      steps.slice(0, 4).forEach((step) => {
+        const stepId = step?.step_id ?? "-";
+        const target = step?.primary_landmark || "-";
+        const instruction = step?.instruction || "-";
+        lines.push(`${stepId}. ${target}｜${instruction}`);
+      });
+
+      if (steps.length > 4) {
+        lines.push(`其餘 ${steps.length - 4} 步請看右側 Route Plan。`);
+      }
+
+      return lines.join("\n");
+    }
+
+    function summarizeCurrentStep(payload) {
+      const step = payload?.step || {};
+      return [
+        `目前執行第 ${step?.step_id ?? "-"} 步`,
+        `目標 landmark：${step?.primary_landmark || "-"}`,
+        `Grounding prompt：${step?.grounding_prompt || "-"}`,
+      ].join("\n");
+    }
+
+    function summarizeMissionState(payload) {
+      return [
+        `Mission 狀態更新：${payload?.mission_state || "-"}`,
+        `current_step：${payload?.current_step_id ?? "-"}`,
+        `last_reason：${payload?.last_reason || "-"}`,
+      ].join("\n");
+    }
+
+    function summarizeLandmarkDetection(payload) {
+      const bbox = payload?.bbox || {};
+      return [
+        `偵測到目標 landmark：${payload?.target_landmark || "-"}`,
+        `score：${Number(payload?.score || 0).toFixed(2)}`,
+        `center：(${bbox.cx ?? "-"}, ${bbox.cy ?? "-"})`,
+      ].join("\n");
     }
 
     function setBufferPreviewState(message) {
@@ -858,11 +911,21 @@
           routePlanView.textContent = pretty(data.payload);
           missionIdEl.textContent = `mission_id：${data.payload?.mission_id || "-"}`;
           appendLog(`route_plan -> mission=${data.payload?.mission_id || "-"}`);
+          const routePlanKey = `${data.payload?.mission_id || "-"}:${(data.payload?.steps || []).length}`;
+          if (chatEventCache.routePlanKey !== routePlanKey) {
+            addMessage("ai", summarizeRoutePlan(data.payload), "VLA Route");
+            chatEventCache.routePlanKey = routePlanKey;
+          }
         } else if (data.type === "current_step") {
           currentStepView.textContent = pretty(data.payload);
           const step = data.payload?.step || {};
           currentStepEl.textContent = `current_step：${step.step_id ?? "-"}`;
           appendLog(`current_step -> ${step.step_id ?? "-"}`);
+          const currentStepKey = `${data.payload?.mission_id || "-"}:${step.step_id ?? "-"}:${step.primary_landmark || "-"}`;
+          if (chatEventCache.currentStepKey !== currentStepKey) {
+            addMessage("ai", summarizeCurrentStep(data.payload), "VLA Step");
+            chatEventCache.currentStepKey = currentStepKey;
+          }
         } else if (data.type === "landmark_detection") {
           landmarkView.textContent = pretty(data.payload);
           const bbox = data.payload?.bbox || {};
@@ -871,6 +934,13 @@
           landmarkScoreEl.textContent = `score：${Number(data.payload?.score || 0).toFixed(2)}`;
           landmarkCenterEl.textContent = `center：(${bbox.cx ?? "-"}, ${bbox.cy ?? "-"})`;
           appendLog(`landmark_detection -> ${JSON.stringify(data.payload)}`);
+          if (data.payload?.found) {
+            const landmarkKey = `${data.payload?.step_id ?? "-"}:${data.payload?.target_landmark || "-"}:${Number(data.payload?.score || 0).toFixed(2)}`;
+            if (chatEventCache.landmarkKey !== landmarkKey) {
+              addMessage("ai", summarizeLandmarkDetection(data.payload), "VLA Detect");
+              chatEventCache.landmarkKey = landmarkKey;
+            }
+          }
         } else if (data.type === "mission_state") {
           missionStateView.textContent = pretty(data.payload);
           missionStateEl.textContent = `mission_state：${data.payload?.mission_state || "-"}`;
@@ -878,6 +948,11 @@
           lastReasonEl.textContent = `last_reason：${data.payload?.last_reason || "-"}`;
           missionIdEl.textContent = `mission_id：${data.payload?.mission_id || "-"}`;
           appendLog(`mission_state -> ${data.payload?.mission_state || "-"}`);
+          const missionStateKey = `${data.payload?.mission_id || "-"}:${data.payload?.mission_state || "-"}:${data.payload?.current_step_id ?? "-"}:${data.payload?.last_reason || "-"}`;
+          if (chatEventCache.missionStateKey !== missionStateKey) {
+            addMessage("ai", summarizeMissionState(data.payload), "VLA State");
+            chatEventCache.missionStateKey = missionStateKey;
+          }
         } else if (data.type === "route_buffer_status") {
           renderBufferStatus(data.payload || {});
           appendLog(`route_buffer_status -> ${JSON.stringify(data.payload)}`);

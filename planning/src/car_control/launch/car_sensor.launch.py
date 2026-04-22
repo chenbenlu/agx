@@ -21,6 +21,7 @@ Data Flow (上行)：
 
 LiDAR：
     urg_node2 (LifecycleNode) → /scan (sensor_msgs/LaserScan)
+    → [laser_filter_node] → /scan_filtered (過濾後方手臂控制箱)
 
 模擬環境請改用：
     ros2 launch car_control car_sensor_sim.launch.py
@@ -153,7 +154,7 @@ def generate_launch_description():
     return LaunchDescription([
         auto_start_arg,
 
-        # 共用核心 (ekf + rsp)
+        # 共用核心 (ekf + rsp + laser_filter)
         core_launch,
 
         # 實體 LiDAR

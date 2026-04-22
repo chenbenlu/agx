@@ -2,6 +2,7 @@
 核心節點啟動檔  【由 car_sensor.launch.py / car_sensor_sim.launch.py 引入，勿直接執行】
 
 包含所有軟體節點（與硬體無關）：
+    - laser_filter_node      — /scan → /scan_filtered（過濾手臂控制箱盲區）
     - robot_state_publisher  — 靜態 TF (URDF)
     - ekf_filter_node        — 里程計融合 → /odometry/filtered（僅 sim 啟用）
 
@@ -75,6 +76,25 @@ def generate_launch_description():
     )
 
     # ==========================================================
+    #  laser_filters — 過濾後方手臂控制箱盲區
+    #  sim / real 共用，確保相同盲區範圍
+    #  輸入: /scan  →  輸出: /scan_filtered
+    # ==========================================================
+    laser_filter_config = os.path.join(pkg, 'config', 'laser_filter.yaml')
+
+    laser_filter_node = Node(
+        package='laser_filters',
+        executable='scan_to_scan_filter_chain',
+        name='scan_to_scan_filter_chain',
+        output='screen',
+        parameters=[laser_filter_config],
+        remappings=[
+            ('scan', 'scan'),
+            ('scan_filtered', 'scan_filtered'),
+        ],
+    )
+
+    # ==========================================================
     #  組合
     # ==========================================================
     return LaunchDescription([
@@ -82,4 +102,5 @@ def generate_launch_description():
         set_sim_time,       # ← 全域注入，後續所有節點自動繼承
         rsp_node,
         ekf_node_sim,
+        laser_filter_node,
     ])

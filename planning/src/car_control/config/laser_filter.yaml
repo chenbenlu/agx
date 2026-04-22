@@ -1,0 +1,24 @@
+# ============================================================
+#  laser_filters 參數檔 — 過濾車體後方手臂控制箱
+# ============================================================
+#  LiDAR 掃描範圍: -135° ~ +135° (270°)
+#  手臂控制箱回波區段:
+#    右後方: -135° ~ -105° (距離 ~0.26m)
+#    左後方: +103° ~ +135° (距離 ~0.25m)
+#
+#  使用 LaserScanAngularBoundsFilter 只保留 -100° ~ +100°，
+#  完全丟棄兩側後方各約 35° 的手臂控制箱回波。
+#
+#  修改方式: 調整 lower_angle / upper_angle (單位: radian)
+#    -100° ≈ -1.7453 rad
+#    +100° ≈ +1.7453 rad
+# ============================================================
+
+scan_to_scan_filter_chain:
+  ros__parameters:
+    filter1:
+      name: angular_bounds_filter
+      type: laser_filters/LaserScanAngularBoundsFilter
+      params:
+        lower_angle: -1.7453
+        upper_angle:  1.7453

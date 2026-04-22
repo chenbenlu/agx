@@ -45,6 +45,7 @@ RUN apt-get update && \
     ros-${ROS_DISTRO}-nav2-bringup \
     ros-${ROS_DISTRO}-slam-toolbox \
     ros-${ROS_DISTRO}-robot-localization \
+    ros-${ROS_DISTRO}-laser-filters \
     # ── RealSense D455 (ROS wrapper only, library will be built from source) ──
     ros-${ROS_DISTRO}-realsense2-camera \
     ros-${ROS_DISTRO}-diagnostic-updater \

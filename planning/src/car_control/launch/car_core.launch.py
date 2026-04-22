@@ -3,18 +3,19 @@
 
 包含所有軟體節點（與硬體無關）：
     - robot_state_publisher  — 靜態 TF (URDF)
-    - ekf_filter_node        — 里程計融合 → /odometry/filtered
+    - ekf_filter_node        — 里程計融合 → /odometry/filtered（僅 sim 啟用）
 
 Launch Arguments：
     use_sim_time  (bool, default: false)
-        false → ekf.yaml     (/raw_odom + D455 IMU)
-        true  → ekf_sim.yaml (Isaac Sim /odom，不發布 TF)
+        false → 實車：繞過 EKF，由 kinematics_node 直接發 odom→base_footprint TF
+                      並讓 nav2 訂閱 /raw_odom。ekf.yaml 先保留但不啟動。
+        true  → ekf_sim.yaml (Isaac Sim /odom，EKF 不發布 TF)
 '''
 
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetParameter
 from ament_index_python.packages import get_package_share_directory
@@ -58,20 +59,12 @@ def generate_launch_description():
     )
 
     # ==========================================================
-    #  EKF — 依 use_sim_time 選擇 config
+    #  EKF — 僅 sim 啟用
     #
-    #  實體機：/raw_odom + D455 IMU，publish_tf=true
-    #  模擬　：Isaac Sim /odom，publish_tf=false (Isaac Sim 已發布 TF)
+    #  實體機：改由 kinematics_node 直接發 odom→base_footprint TF，
+    #         nav2 訂閱 /raw_odom，暫時繞過 EKF。ekf.yaml 先保留備用。
+    #  模擬　：Isaac Sim /odom，publish_tf=false（Isaac Sim 已發布 TF）
     # ==========================================================
-    ekf_node_real = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_filter_node',
-        output='screen',
-        parameters=[os.path.join(pkg, 'config', 'ekf.yaml')],
-        condition=UnlessCondition(use_sim_time),
-    )
-
     ekf_node_sim = Node(
         package='robot_localization',
         executable='ekf_node',
@@ -88,6 +81,5 @@ def generate_launch_description():
         use_sim_time_arg,
         set_sim_time,       # ← 全域注入，後續所有節點自動繼承
         rsp_node,
-        ekf_node_real,
         ekf_node_sim,
     ])

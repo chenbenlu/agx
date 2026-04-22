@@ -1,6 +1,14 @@
 # Nav2 實體機器人 override — 與 nav2_params_base.yaml 深度合併後使用
 # 注意：尚未在實車上測試
 
+bt_navigator:
+  ros__parameters:
+    odom_topic: /raw_odom          # 實車繞過 EKF，直接吃 kinematics_node 的 odom
+
+velocity_smoother:
+  ros__parameters:
+    odom_topic: "/raw_odom"        # 同上
+
 amcl:
   ros__parameters:
     alpha1: 0.2

@@ -34,7 +34,7 @@ kinematics_node:
 
     # --- 馬達 / 編碼器參數 ---
     encoder_resolution: 720        # 編碼器每圈脈衝數
-    gear_ratio: 1.0                # 減速比（馬達端:輪端）
+    gear_ratio: 1.0               # 減速比（馬達端:輪端，實車 10:1 gearbox）
 
     # --- Odom / TF Frame ---
     odom_frame: 'odom'             # TF 父 frame
@@ -44,3 +44,4 @@ kinematics_node:
     # --- Odom 更新模式 ---
     odom_up_hz: 10                 # 開迴路模式 Odom 更新頻率 (Hz)
     use_encoder_feedback: true     # true=閉迴路 (Arduino Push), false=開迴路 (cmd_vel 積分)
+    publish_tf: true               # 實車繞過 EKF，由本節點直接發 odom→base_footprint TF

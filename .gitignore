@@ -85,3 +85,4 @@ env/
 tmpclaude-*
 .claude/settings.local.json
 .codex
+CLAUDE.md

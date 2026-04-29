@@ -211,16 +211,17 @@ private:
         const double v_left  = linear_x - (angular_z * car_distance_ / 2.0);
         const double v_right = linear_x + (angular_z * car_distance_ / 2.0);
 
-        // ---- m/s → RPM ----
-        const int rpm_left  = static_cast<int>(
-            (v_left  / tire_circumference_) * 60.0 * gear_ratio_);
-        const int rpm_right = static_cast<int>(
-            (v_right / tire_circumference_) * 60.0 * gear_ratio_);
+        // ---- m/s → driver register 0x43 單位（motor encoder ticks / 0.1s）----
+        // driver_value = (v / circumference) × total_pulses × 10
+        const int drv_left  = static_cast<int>(
+            (v_left  / tire_circumference_) * total_pulses_ * 10.0);
+        const int drv_right = static_cast<int>(
+            (v_right / tire_circumference_) * total_pulses_ * 10.0);
 
         // ---- 組合 JSON (使用 nlohmann/json) ----
         json cmd;
-        cmd["ls"] = rpm_left;
-        cmd["rs"] = rpm_right;
+        cmd["ls"] = drv_left;
+        cmd["rs"] = drv_right;
 
         auto tx_msg = std_msgs::msg::String();
         tx_msg.data = cmd.dump();

@@ -2,10 +2,17 @@
 
 amcl:
   ros__parameters:
-    alpha1: 0.5
-    alpha2: 0.5
-    alpha3: 0.5
-    alpha4: 0.5
+    # 對齊 real config（0.2）。先前 0.5 會在 in-place 旋轉（尤其長走道對稱環境）
+    # 把每粒子 yaw 注入 std ≈ √0.5·0.18 rad ≈ 7°/cycle，180° 旋轉約撐開 23° + 40 cm，
+    # scan likelihood 在走廊長軸方向沒法 anchor 回來 → AMCL 散掉。
+    alpha1: 0.2
+    alpha2: 0.2
+    alpha3: 0.2
+    alpha4: 0.2
+    # Tier 2：在長走道對稱環境多撒粒子 + 旋轉時更頻繁觸發 sensor update，
+    # 把旋轉後 σ 收得更乾淨。base 是 max=2000、update_min_a=0.2。
+    max_particles: 3000
+    update_min_a: 0.1
     # 模擬環境自動設定初始位姿，讓 AMCL 立即發布 map→odom TF
     set_initial_pose: true
     initial_pose:
@@ -43,8 +50,16 @@ controller_server:
       regulated_linear_scaling_min_speed: 0.3
       # 內建原地旋轉：大角度偏差時先轉向再追蹤
       use_rotate_to_heading: true
-      rotate_to_heading_angular_vel: 1.8
-      max_angular_accel: 3.2
+      rotate_to_heading_min_angle: 0.785   # 顯式對齊 real config，避免預設值未來變動
+      # 1.2 對齊 real。1.8 太快會在每 AMCL update 之間累積大角度 propagate，
+      # 配合 sim 端 alpha 噪聲 → 粒子在無 scan 校正空檔散開
+      rotate_to_heading_angular_vel: 1.2
+      # Isaac Sim DifferentialController 在 angular cmd <0.5 rad/s 有靜摩擦死區（測得：
+      # cmd 0.16→實際 0.03、cmd 0.5→實際 0.25、cmd 0.7→實際 0.51、cmd 1.0→實際 0.79）。
+      # RPP closed-loop 用 curr_speed + max_angular_accel*dt 限速。dt=0.05s 下 12 仍可
+      # 讓首步 cmd ≈ 0.6 rad/s 突破死區，比 20 平滑、減少 wheel slip 導致 odom 失準。
+      max_angular_accel: 12.0
+      stateful: true                       # 進入 rotation 後須 angle < threshold 才退出
       allow_reversing: false
       max_robot_pose_search_dist: 10.0
       max_angular_vel: 2.0
@@ -58,6 +73,6 @@ velocity_smoother:
   ros__parameters:
     max_velocity: [1.5, 0.0, 2.0]
     min_velocity: [-0.3, 0.0, -2.0]
-    max_accel: [0.6, 0.0, 3.2]
+    max_accel: [0.6, 0.0, 12.0]   # 與 controller max_angular_accel 對齊，仍高於 real 以補 sim 死區
     max_decel: [-3.0, 0.0, -3.2]
     deadband_velocity: [0.02, 0.0, 0.02]

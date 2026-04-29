@@ -43,18 +43,26 @@ controller_server → /cmd_vel_nav → velocity_smoother → /cmd_vel → Isaac 
 
 ### 參數檔差異 (sim vs real)
 
-| 參數 | `nav2_params.yaml` (實車) | `nav2_params_sim.yaml` (模擬) |
+| 參數 | `nav2_params_real.yaml` (實車) | `nav2_params_sim.yaml` (模擬) |
 |---|---|---|
 | `use_sim_time` | `False` | `True` |
 | Controller | `RotationShimController` + RPP | RPP 直接（無 RotationShim） |
 | `desired_linear_vel` | 0.6 m/s | 1.2 m/s |
 | `max_angular_vel` | 1.2 rad/s | 2.0 rad/s |
-| `use_regulated_linear_velocity_scaling` | true | false |
-| `use_rotate_to_heading` | true | false |
-| `velocity_smoother max_velocity` | [0.8, 0.0, 1.5] | [1.5, 0.0, 2.5] |
+| `use_regulated_linear_velocity_scaling` | true | true |
+| `use_rotate_to_heading` | true | true |
+| `rotate_to_heading_angular_vel` | 1.2 rad/s | 1.2 rad/s |
+| `max_angular_accel` | 2.0 rad/s² | 12.0 rad/s² |
+| `velocity_smoother max_velocity` | [0.8, 0.0, 1.5] | [1.5, 0.0, 2.0] |
+| `velocity_smoother max_accel` (angular) | 2.5 rad/s² | 12.0 rad/s² |
+| `amcl alpha1–4` | 0.2 | 0.2 |
+| `amcl max_particles` | 2000（base） | 3000 |
+| `amcl update_min_a` | 0.2 rad（base） | 0.1 rad |
 
-> **注意**：模擬環境關閉 `RotationShim` 與 `rotate_to_heading` 是因為 Isaac Sim 的地面摩擦
-> 讓低角速度原地旋轉無法生效。實車上這些功能正常運作。
+> **注意**：sim 端 `max_angular_accel` 拉到 12 是為了突破 Isaac Sim DifferentialController 的角速度
+> 靜摩擦死區（cmd < 0.5 rad/s 不轉）；首步 cmd 必須 ≥ 0.6 rad/s 才能起動。
+> AMCL `max_particles` 與 `update_min_a` 在 sim 加強，是為了長走道 180° 原地旋轉時抑制粒子沿走廊
+> 長軸方向滑動。實車不需要這些調整。
 
 ---
 

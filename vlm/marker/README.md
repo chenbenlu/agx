@@ -33,6 +33,10 @@ ros2 service call /set_prompt isaac_ros_grounding_dino_interfaces/srv/SetPrompt 
 "{prompt: 'black bicycle. person. chair. door.'}"
 ```
 
+### RUN THIS 0430:
+```bash
+ros2 service call /set_prompt isaac_ros_grounding_dino_interfaces/srv/SetPrompt   "{prompt: 'black bicycle. grey umbrella.'}"
+```
 Each detected `class_id` gets a stable marker color.
 
 ## Run
@@ -44,10 +48,7 @@ make join c=vlm
 source /opt/ros/humble/setup.bash
 source /workspaces/isaac_ros-dev/install/setup.bash
 
-python3 /opt/vlm_marker/semantic_map_marker_node.py --ros-args \
-  -p score_threshold:=0.75 \
-  -p map_frame:=map \
-  -p base_frame:=base_footprint
+python3 /opt/vlm_marker/semantic_map_marker_node.py --ros-args   -p score_threshold:=0.65   -p map_frame:=map   -p base_frame:=base_footprint -p mark_once_per_class:=true
 ```
 
 To mark only one class:
@@ -107,4 +108,13 @@ ros2 run tf2_ros tf2_echo map base_footprint
 ros2 topic echo /amcl_pose
 ros2 topic echo /semantic_map/observation
 ros2 topic echo /semantic_map/markers
+```
+### grounding dino
+```bash 
+ros2 launch isaac_ros_grounding_dino isaac_ros_grounding_dino.launch.py    model_file_path:=/workspaces/isaac_ros-dev/isaac_ros_assets/models/grounding_dino/grounding_dino_model.onnx    engine_file_path:=/workspaces/isaac_ros-dev/isaac_ros_assets/models/grounding_dino/grounding_dino_model.plan    input_image_width:=640    input_image_height:=480
+```
+
+### bbox
+```bash
+ python3 /workspaces/isaac_ros-dev/src/bbox_visualizer.py
 ```

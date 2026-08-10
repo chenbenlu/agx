@@ -11,7 +11,9 @@
     car_control/config/urg_node2_override.yaml 注入覆寫。
 
 Data Flow (下行)：
-    /cmd_vel → [kinematics_node] → /motor_cmd → [serial_bridge_node] → UART TX {"ls":x,"rs":y}
+    /cmd_vel_nav (nav2) ─┐
+                          ├─► [twist_mux] ─► /cmd_vel ─► [kinematics_node] ─► /motor_cmd ─► [serial_bridge_node] → UART TX {"ls":x,"rs":y}
+    /cmd_vel_teleop ─────┘  (priority: teleop > nav, timeout 0.5s)
     /charge_cmd → [serial_bridge_node] → UART TX {"charge":1}
 
 Data Flow (上行)：
@@ -57,6 +59,7 @@ def generate_launch_description():
     # ==========================================================
     car_control_config = os.path.join(pkg, 'config', 'car_controller_cpp.yaml')
     urg_override_config = os.path.join(pkg, 'config', 'urg_node2_override.yaml')
+    twist_mux_config = os.path.join(pkg, 'config', 'twist_mux.yaml')
 
     with open(urg_override_config, 'r') as f:
         urg_params = yaml.safe_load(f)['urg_node2']['ros__parameters']
@@ -149,6 +152,19 @@ def generate_launch_description():
     )
 
     # ==========================================================
+    #  twist_mux — 速度多工器（nav2 ↔ teleop_twist_keyboard）
+    # ==========================================================
+    twist_mux_node = Node(
+        package='twist_mux',
+        executable='twist_mux',
+        name='twist_mux',
+        output='screen',
+        emulate_tty=True,
+        parameters=[twist_mux_config],
+        remappings=[('cmd_vel_out', 'cmd_vel')],
+    )
+
+    # ==========================================================
     #  組合啟動
     # ==========================================================
     return LaunchDescription([
@@ -165,4 +181,7 @@ def generate_launch_description():
         # 實體車控
         serial_bridge_node,
         kinematics_node,
+
+        # 速度多工器
+        twist_mux_node,
     ])

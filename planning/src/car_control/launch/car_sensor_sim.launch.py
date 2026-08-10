@@ -12,8 +12,12 @@
         × serial_bridge    — 馬達指令由 Isaac Sim OmniGraph DifferentialController 處理
         × kinematics_node  — /cmd_vel 直接接入 Isaac Sim
 
+    twist_mux 與 real 一致掛載，sim 通常無人按鍵，nav2 直通；保留通道以利 debug。
+
 Data Flow (模擬)：
-    /cmd_vel → [Isaac Sim DifferentialController OmniGraph] → 輪速模擬
+    /cmd_vel_nav (nav2) ─┐
+                          ├─► [twist_mux] ─► /cmd_vel → [Isaac Sim DifferentialController OmniGraph] → 輪速模擬
+    /cmd_vel_teleop ─────┘
     Isaac Sim Encoder OmniGraph → /odom → [ekf_filter_node] → /odometry/filtered
     Isaac Sim LiDAR Bridge → /scan
 
@@ -25,12 +29,14 @@ import os
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
 
     pkg = get_package_share_directory('car_control')
+    twist_mux_config = os.path.join(pkg, 'config', 'twist_mux.yaml')
 
     # ==========================================================
     #  引入共用核心 (ekf_sim.yaml + rsp)，固定 use_sim_time=true
@@ -42,6 +48,20 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': 'true'}.items(),
     )
 
+    # ==========================================================
+    #  twist_mux — 速度多工器（nav2 ↔ teleop_twist_keyboard）
+    # ==========================================================
+    twist_mux_node = Node(
+        package='twist_mux',
+        executable='twist_mux',
+        name='twist_mux',
+        output='screen',
+        emulate_tty=True,
+        parameters=[twist_mux_config, {'use_sim_time': True}],
+        remappings=[('cmd_vel_out', 'cmd_vel')],
+    )
+
     return LaunchDescription([
         core_launch,
+        twist_mux_node,
     ])

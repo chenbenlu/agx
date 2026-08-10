@@ -58,6 +58,7 @@ RUN apt-get update && \
     # ── Utilities ──
     ros-${ROS_DISTRO}-tf-transformations \
     ros-${ROS_DISTRO}-teleop-twist-keyboard \
+    ros-${ROS_DISTRO}-twist-mux \
     nlohmann-json3-dev \
     python3-vcstool \
     usbutils \

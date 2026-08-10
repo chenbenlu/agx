@@ -30,6 +30,8 @@
   <exec_depend>tf2</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>tf2_msgs</exec_depend>
+  <exec_depend>twist_mux</exec_depend>
+  <exec_depend>teleop_twist_keyboard</exec_depend>
 
   <!-- ====== 測試依賴 ====== -->
   <test_depend>ament_lint_auto</test_depend>

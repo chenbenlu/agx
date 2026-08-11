@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from collections import deque
-import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 from typing import Any
@@ -17,7 +15,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
-from .json_utils import dumps_json, loads_json
+from .json_utils import dumps_json, extract_json_object, loads_json
 from .topics import (
     ANNOTATED_IMAGE_TOPIC,
     CAMERA_IMAGE_TOPIC,
@@ -25,18 +23,6 @@ from .topics import (
     INFERENCE_INTERVAL_TOPIC,
     INFERENCE_RESULT_TOPIC,
 )
-
-
-def _extract_json_object(raw: str) -> dict[str, Any]:
-    decoder = json.JSONDecoder()
-    for match in re.finditer(r"\{", raw):
-        try:
-            payload, _ = decoder.raw_decode(raw[match.start() :])
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict):
-            return payload
-    raise ValueError("No JSON object found in reasoner output")
 
 
 class MockReasonerBackend:
@@ -100,7 +86,7 @@ class CosmosCLIBackend:
             )
             if result.returncode != 0:
                 raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-            payload = _extract_json_object(result.stdout)
+            payload = extract_json_object(result.stdout)
             payload.setdefault("step_id", int(prompt_payload.get("step_id", -1)))
             return payload
 

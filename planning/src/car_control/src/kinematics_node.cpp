@@ -67,6 +67,7 @@ public:
         this->declare_parameter<std::string>("odom_frame", "odom");
         this->declare_parameter<std::string>("base_frame", "base_link");
         this->declare_parameter<std::string>("base_footprint_frame", "base_footprint");
+        this->declare_parameter<bool>("publish_tf", false);
 
         car_distance_        = this->get_parameter("car_distance").as_double();
         car_mode_            = this->get_parameter("car_mode").as_string();
@@ -78,6 +79,7 @@ public:
         odom_frame_          = this->get_parameter("odom_frame").as_string();
         base_frame_          = this->get_parameter("base_frame").as_string();
         base_footprint_frame_= this->get_parameter("base_footprint_frame").as_string();
+        publish_tf_          = this->get_parameter("publish_tf").as_bool();
 
         // =====================================================================
         //  衍生常數計算
@@ -100,7 +102,13 @@ public:
         RCLCPP_INFO(this->get_logger(), "base_footprint     = %s", base_footprint_frame_.c_str());
         RCLCPP_INFO(this->get_logger(), "use_encoder_feedback = %s",
                      use_encoder_feedback_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "publish_tf         = %s",
+                     publish_tf_ ? "true" : "false");
         RCLCPP_INFO(this->get_logger(), "=================================");
+
+        if (publish_tf_) {
+            tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
+        }
 
         // =====================================================================
         //  Odom 狀態初始化
@@ -203,16 +211,17 @@ private:
         const double v_left  = linear_x - (angular_z * car_distance_ / 2.0);
         const double v_right = linear_x + (angular_z * car_distance_ / 2.0);
 
-        // ---- m/s → RPM ----
-        const int rpm_left  = static_cast<int>(
-            (v_left  / tire_circumference_) * 60.0 * gear_ratio_);
-        const int rpm_right = static_cast<int>(
-            (v_right / tire_circumference_) * 60.0 * gear_ratio_);
+        // ---- m/s → driver register 0x43 單位（motor encoder ticks / 0.1s）----
+        // driver_value = (v / circumference) × total_pulses × 10
+        const int drv_left  = static_cast<int>(
+            (v_left  / tire_circumference_) * total_pulses_ * 10.0);
+        const int drv_right = static_cast<int>(
+            (v_right / tire_circumference_) * total_pulses_ * 10.0);
 
         // ---- 組合 JSON (使用 nlohmann/json) ----
         json cmd;
-        cmd["ls"] = rpm_left;
-        cmd["rs"] = rpm_right;
+        cmd["ls"] = drv_left;
+        cmd["rs"] = drv_right;
 
         auto tx_msg = std_msgs::msg::String();
         tx_msg.data = cmd.dump();
@@ -395,7 +404,41 @@ private:
         odom.twist.twist.linear.y  = vy;
         odom.twist.twist.angular.z = wz;
 
+        // --- Covariance ---
+        // robot_localization 對 0 covariance 的量測會拒絕或凍結，
+        // 必須給出非零對角值才會被 EKF 接受
+        // Pose: [x, y, z, roll, pitch, yaw] — 對角 index 0, 7, 14, 21, 28, 35
+        odom.pose.covariance[0]  = 0.01;  // x
+        odom.pose.covariance[7]  = 0.01;  // y
+        odom.pose.covariance[14] = 1e6;   // z (2D，不信任)
+        odom.pose.covariance[21] = 1e6;   // roll
+        odom.pose.covariance[28] = 1e6;   // pitch
+        odom.pose.covariance[35] = 0.02;  // yaw
+        // Twist: [vx, vy, vz, wx, wy, wz]
+        odom.twist.covariance[0]  = 0.01; // vx
+        odom.twist.covariance[7]  = 0.01; // vy
+        odom.twist.covariance[14] = 1e6;  // vz
+        odom.twist.covariance[21] = 1e6;  // wx
+        odom.twist.covariance[28] = 1e6;  // wy
+        odom.twist.covariance[35] = 0.02; // wz
+
         pub_odom_->publish(odom);
+
+        // --- TF: odom → base_footprint（僅在繞過 EKF 時啟用）---
+        if (publish_tf_ && tf_broadcaster_) {
+            geometry_msgs::msg::TransformStamped tf_msg;
+            tf_msg.header.stamp    = stamp;
+            tf_msg.header.frame_id = odom_frame_;
+            tf_msg.child_frame_id  = base_footprint_frame_;
+            tf_msg.transform.translation.x = x_;
+            tf_msg.transform.translation.y = y_;
+            tf_msg.transform.translation.z = 0.0;
+            tf_msg.transform.rotation.x = q.x();
+            tf_msg.transform.rotation.y = q.y();
+            tf_msg.transform.rotation.z = q.z();
+            tf_msg.transform.rotation.w = q.w();
+            tf_broadcaster_->sendTransform(tf_msg);
+        }
     }
 
     // =========================================================================
@@ -413,6 +456,7 @@ private:
     std::string odom_frame_;     // TF 父 frame
     std::string base_frame_;     // TF 子 frame
     std::string base_footprint_frame_; // TF 地面投影 frame
+    bool publish_tf_;            // 是否自行發布 odom→base_footprint TF（繞過 EKF 時啟用）
 
     double tire_circumference_;  // π × D
     double tire_radius_;         // D / 2
@@ -435,6 +479,7 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom_;
     rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr pub_battery_voltage_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_charging_state_;
+    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
     // --- ROS Subscribers ---
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr sub_cmd_vel_;

@@ -16,6 +16,7 @@ services:
       - ROS_DOMAIN_ID=0
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - ISAAC_ROS_WS=/workspaces/isaac_ros-dev
+      - PYTHONPATH=/opt/vla_demo
       - DISPLAY=${DISPLAY}
       - XAUTHORITY=/tmp/.docker.xauth
       - EGL_PLATFORM=device          # VPI 需要 EGL，headless 環境下必須用 device platform
@@ -29,6 +30,9 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
       - /home/systemlabagx/disk/workspaces/isaac_ros-dev:/workspaces/isaac_ros-dev
+      - /home/systemlabagx/disk/agx/cosmos/VLA:/opt/vla_demo
+      - /home/systemlabagx/disk/agx/vlm/bbox_visualizer.py:/opt/vlm_tools/bbox_visualizer.py:ro
+      - /home/systemlabagx/disk/agx/vlm/landmark_locator_node.py:/opt/vlm_tools/landmark_locator_node.py:ro
     stdin_open: true
     tty: true
     command: /bin/bash -c "while true; do sleep 3600; done"

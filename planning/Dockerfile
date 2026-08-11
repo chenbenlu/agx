@@ -45,6 +45,7 @@ RUN apt-get update && \
     ros-${ROS_DISTRO}-nav2-bringup \
     ros-${ROS_DISTRO}-slam-toolbox \
     ros-${ROS_DISTRO}-robot-localization \
+    ros-${ROS_DISTRO}-laser-filters \
     # ── RealSense D455 (ROS wrapper only, library will be built from source) ──
     ros-${ROS_DISTRO}-realsense2-camera \
     ros-${ROS_DISTRO}-diagnostic-updater \
@@ -57,6 +58,7 @@ RUN apt-get update && \
     # ── Utilities ──
     ros-${ROS_DISTRO}-tf-transformations \
     ros-${ROS_DISTRO}-teleop-twist-keyboard \
+    ros-${ROS_DISTRO}-twist-mux \
     nlohmann-json3-dev \
     python3-vcstool \
     usbutils \

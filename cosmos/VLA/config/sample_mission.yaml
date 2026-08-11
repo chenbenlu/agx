@@ -8,7 +8,10 @@ steps:
   - step_id: 1
     instruction: 離開起始區域並面向主走廊
     visual_goal: 前方出現主走廊視野
+    scene_description: 視野前方打開成主走廊，左側與右側都有牆面邊界。
     expected_landmarks: [corridor]
+    primary_landmark: corridor
+    grounding_prompt: corridor.
     control_primitive: move_forward_until_recheck
     votes_needed: 3
     confidence_threshold: 0.75
@@ -18,7 +21,10 @@ steps:
   - step_id: 2
     instruction: 沿主走廊前進並搜尋右側第一個支路
     visual_goal: 右側出現可通行支路
+    scene_description: 主走廊持續向前延伸，右手邊出現可通行的支路開口。
     expected_landmarks: [corridor, right_branch]
+    primary_landmark: right_branch
+    grounding_prompt: right branch.
     control_primitive: move_forward_until_recheck
     votes_needed: 3
     confidence_threshold: 0.75
@@ -28,7 +34,10 @@ steps:
   - step_id: 3
     instruction: 到達支路後執行右轉
     visual_goal: 視角完成右轉並對準新走廊方向
+    scene_description: 鏡頭在轉角點完成右轉，新的支路走廊出現在正前方。
     expected_landmarks: [right_turn_point, branch_corridor]
+    primary_landmark: right_turn_point
+    grounding_prompt: right turn point.
     control_primitive: turn_right_90
     votes_needed: 3
     confidence_threshold: 0.8
@@ -38,7 +47,10 @@ steps:
   - step_id: 4
     instruction: 沿支路前進並搜尋貨梯區域
     visual_goal: 出現電梯或貨梯相關區域特徵
+    scene_description: 支路走廊上可見貨梯區域的門面或指示特徵。
     expected_landmarks: [branch_corridor, freight_elevator_zone]
+    primary_landmark: freight_elevator_zone
+    grounding_prompt: freight elevator zone.
     control_primitive: move_forward_until_recheck
     votes_needed: 3
     confidence_threshold: 0.75
@@ -48,7 +60,10 @@ steps:
   - step_id: 5
     instruction: 停在貨梯前方定位點
     visual_goal: 貨梯位於前方且距離適中
+    scene_description: 貨梯門面位於前方中央，適合停靠的位置清楚可見。
     expected_landmarks: [freight_elevator, stop_point]
+    primary_landmark: freight_elevator
+    grounding_prompt: freight elevator.
     control_primitive: approach_target_zone
     votes_needed: 3
     confidence_threshold: 0.8

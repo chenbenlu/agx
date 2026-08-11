@@ -1,18 +1,19 @@
 '''
-統一感測器啟動檔 — 車控節點 + LiDAR
+感測器啟動檔  【實體機器人】
 啟動命令：
     ros2 launch car_control car_sensor.launch.py
 
 架構說明：
-    此 Launch 檔整合所有感測器相關的 Node，取代過去需要分別啟動
-    car_control 和 urg_node2 的流程。
+    引入 car_core.launch.py (robot_state_publisher + ekf_filter_node)，
+    再疊加實體硬體節點 (urg_node2 + serial_bridge_node + kinematics_node)。
 
     第三方套件 (urg_node2) 保持唯讀，其參數透過
-    car_control/config/urg_node2_override.yaml 注入覆寫，
-    遵循 ROS 2 的 Open-Closed Principle。
+    car_control/config/urg_node2_override.yaml 注入覆寫。
 
 Data Flow (下行)：
-    /cmd_vel → [kinematics_node] → /motor_cmd → [serial_bridge_node] → UART TX {"ls":x,"rs":y}
+    /cmd_vel_nav (nav2) ─┐
+                          ├─► [twist_mux] ─► /cmd_vel ─► [kinematics_node] ─► /motor_cmd ─► [serial_bridge_node] → UART TX {"ls":x,"rs":y}
+    /cmd_vel_teleop ─────┘  (priority: teleop > nav, timeout 0.5s)
     /charge_cmd → [serial_bridge_node] → UART TX {"charge":1}
 
 Data Flow (上行)：
@@ -20,11 +21,12 @@ Data Flow (上行)：
     UART RX {"pow":24.5}             → [serial_bridge_node] → /battery_state  → [kinematics_node] → /battery_voltage
     UART RX {"can_v":x,"can_w":y...} → [serial_bridge_node] → /charge_status → [kinematics_node] → /charging_state
 
-狀態推估 (Sensor Fusion)：
-    /raw_odom + /camera/imu → [ekf_node] → /odometry/filtered + odom->base_footprint TF
-
 LiDAR：
     urg_node2 (LifecycleNode) → /scan (sensor_msgs/LaserScan)
+    → [laser_filter_node] → /scan_filtered (過濾後方手臂控制箱)
+
+模擬環境請改用：
+    ros2 launch car_control car_sensor_sim.launch.py
 '''
 
 import os
@@ -33,59 +35,32 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     EmitEvent,
+    IncludeLaunchDescription,
     RegisterEventHandler,
 )
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessStart
 from launch.events import matches_action
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import LifecycleNode, Node
 from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import ChangeState
 from lifecycle_msgs.msg import Transition
 from ament_index_python.packages import get_package_share_directory
-import xacro
 
 
 def generate_launch_description():
 
+    pkg = get_package_share_directory('car_control')
+
     # ==========================================================
     #  參數檔路徑
     # ==========================================================
+    car_control_config = os.path.join(pkg, 'config', 'car_controller_cpp.yaml')
+    urg_override_config = os.path.join(pkg, 'config', 'urg_node2_override.yaml')
+    twist_mux_config = os.path.join(pkg, 'config', 'twist_mux.yaml')
 
-    # car_control 自有節點的參數
-    car_control_config = os.path.join(
-        get_package_share_directory('car_control'),
-        'config',
-        'car_controller_cpp.yaml',
-    )
-
-    # EKF 參數檔
-    ekf_config = os.path.join(
-        get_package_share_directory('car_control'),
-        'config',
-        'ekf.yaml',
-    )
-
-    # urg_node2 覆寫參數 — 放在 car_control 內，第三方套件保持唯讀
-    urg_override_config = os.path.join(
-        get_package_share_directory('car_control'),
-        'config',
-        'urg_node2_override.yaml',
-    )
-
-    # URDF XACRO 檔案路徑
-    xacro_file = os.path.join(
-        get_package_share_directory('car_control'),
-        'urdf',
-        'amr_core.urdf.xacro'
-    )
-    
-    # 讀取 xacro 並轉譯成純 URDF xml 字串
-    doc = xacro.process_file(xacro_file)
-    robot_description = {'robot_description': doc.toxml()}
-
-    # 讀取 YAML 並取得 ros__parameters dict
     with open(urg_override_config, 'r') as f:
         urg_params = yaml.safe_load(f)['urg_node2']['ros__parameters']
 
@@ -98,6 +73,16 @@ def generate_launch_description():
     )
 
     # ==========================================================
+    #  引入共用核心 (ekf + rsp)，固定 use_sim_time=false
+    # ==========================================================
+    core_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg, 'launch', 'car_core.launch.py')
+        ),
+        launch_arguments={'use_sim_time': 'false'}.items(),
+    )
+
+    # ==========================================================
     #  urg_node2 — LifecycleNode
     # ==========================================================
     urg_lifecycle_node = LifecycleNode(
@@ -107,7 +92,7 @@ def generate_launch_description():
         namespace='',
         output='screen',
         emulate_tty=True,
-        parameters=[urg_params],           # ← 注入我們的覆寫參數
+        parameters=[urg_params],
         remappings=[('scan', 'scan')],
     )
 
@@ -167,48 +152,36 @@ def generate_launch_description():
     )
 
     # ==========================================================
-    #  EKF (Robot Localization)
+    #  twist_mux — 速度多工器（nav2 ↔ teleop_twist_keyboard）
     # ==========================================================
-    ekf_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_filter_node',
+    twist_mux_node = Node(
+        package='twist_mux',
+        executable='twist_mux',
+        name='twist_mux',
         output='screen',
-        parameters=[ekf_config],
+        emulate_tty=True,
+        parameters=[twist_mux_config],
+        remappings=[('cmd_vel_out', 'cmd_vel')],
     )
-
-    # ==========================================================
-    #  Robot State Publisher (處理 URDF 靜態轉換)
-    # ==========================================================
-    rsp_node = Node(
-        package='robot_state_publisher',
-        executable='robot_state_publisher',
-        name='robot_state_publisher',
-        output='screen',
-        parameters=[robot_description, {'use_sim_time': False}]
-    )
-
 
     # ==========================================================
     #  組合啟動
     # ==========================================================
     return LaunchDescription([
-        # Launch Arguments
         auto_start_arg,
 
-        # LiDAR (LifecycleNode + 自動狀態轉換)
+        # 共用核心 (ekf + rsp + laser_filter)
+        core_launch,
+
+        # 實體 LiDAR
         urg_lifecycle_node,
         configure_handler,
         activate_handler,
 
-        # 車控節點
+        # 實體車控
         serial_bridge_node,
         kinematics_node,
 
-        # EKF 濾波器 (融合里程計與 IMU)
-        ekf_node,
-
-        # URDF / TF (所有靜態座標樹由 robot_state_publisher 統一發布)
-        rsp_node,
+        # 速度多工器
+        twist_mux_node,
     ])
-

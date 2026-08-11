@@ -15,23 +15,25 @@ ekf_filter_node:
     world_frame: odom             # 作為一般的 odom -> base_link TF 發布 
 
     # ==== Odom0: Arduino 底層輪速器 (/raw_odom) ====
+    # 第一次實車導航測試比照 ekf_sim.yaml：信任 encoder 的 pose + velocity + yaw
     odom0: /raw_odom
-    odom0_config: [false,  false,  false,
-                   false,  false,  false,
-                   true,   true,  false,    # 我們只信任底層回報的 X 軸向線性速度 (前後推力)
-                   false,  false,  false,    # 忽略所有原始的 Yaw 與 角速度
-                   false,  false,  false]
+    odom0_config: [true,   true,  false,
+                   false,  false, true,    # x, y 位置 + yaw 姿態
+                   true,   true,  false,   # x, y 線速度
+                   false,  false, true,    # yaw 角速度
+                   false,  false, false]
     odom0_queue_size: 10
     odom0_differential: false
 
     # ==== IMU0: RealSense D455 (/camera/camera/imu) ====
-    imu0: /camera/camera/imu
-    imu0_config: [false, false, false,
-                  false, false, false,       
-                  false, false, false,
-                  false, true, true,        # 我們極度信任 D455 提供給我們的 Yaw 角速度 (Z-axis Angular Velocity)
-                  false, false, false]
-    imu0_queue_size: 10
-    imu0_differential: false
-    # 移除重力加速度，避免 AMR 在微小坡度時的擾動
-    imu0_remove_gravitational_acceleration: true
+    # 第一次實車測試先不接 IMU；若 yaw 飄移再啟用下方整段
+    # imu0: /camera/camera/imu
+    # imu0_config: [false, false, false,
+    #               false, false, false,
+    #               false, false, false,
+    #               false, true, true,        # 極度信任 D455 的 Yaw 角速度 (Z-axis Angular Velocity)
+    #               false, false, false]
+    # imu0_queue_size: 10
+    # imu0_differential: false
+    # # 移除重力加速度，避免 AMR 在微小坡度時的擾動
+    # imu0_remove_gravitational_acceleration: true

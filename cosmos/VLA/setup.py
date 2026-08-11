@@ -32,6 +32,8 @@ setup(
         "console_scripts": [
             "vla_mission_manager = vla_demo.mission_manager:main",
             "cosmos_reasoner_node = vla_demo.reasoner_node:main",
+            "vla_route_planner = vla_demo.route_planner_node:main",
+            "landmark_step_evaluator = vla_demo.landmark_step_evaluator_node:main",
             "vla_executor = vla_demo.executor_node:main",
             "camera_front_node = vla_demo.camera_front_node:main",
         ],

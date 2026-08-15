@@ -78,6 +78,10 @@ env/
 *.zip
 *.mp4
 
+# GroundingDINO 權重與上游 clone（過大，不進版控；.pth 分片檔名不符 *.pth 規則所以另外列）
+vlm/grounding_test/weights/
+vlm/grounding_test/GroundingDINO/
+
 # 系統日誌
 *.log
 

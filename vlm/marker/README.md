@@ -118,3 +118,13 @@ ros2 launch isaac_ros_grounding_dino isaac_ros_grounding_dino.launch.py    model
 ```bash
  python3 /workspaces/isaac_ros-dev/src/bbox_visualizer.py
 ```
+
+### realsense
+```bash
+ros2 run realsense2_camera realsense2_camera_node --ros-args \
+-p rgb_camera.profile:=640x480x30 \
+-p align_depth.enable:=False \
+-p enable_depth:=False \
+-p enable_infra1:=False \
+-p enable_infra2:=False
+```

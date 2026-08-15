@@ -10,7 +10,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     image: agx_ros/cosmos:latest
-    container_name: cosmos
+    container_name: ${CONTAINER_PREFIX:-}cosmos
     runtime: nvidia
     network_mode: host
     ipc: host
@@ -23,7 +23,7 @@ services:
       - CUDA_HOME=/usr/local/cuda
       - TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
       - HF_TOKEN=${HF_TOKEN:-}
-      - ROS_DOMAIN_ID=0
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - PYTHONPATH=/opt/vla_demo
     privileged: false
@@ -43,11 +43,11 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - /run/jtop.sock:/run/jtop.sock
-      - /home/systemlabagx/disk/workspaces/data:/data
-      - /home/systemlabagx/disk/workspaces/data/cosmos_cache:/root/.cache
-      - /home/systemlabagx/disk/workspaces:/workspaces
-      - /home/systemlabagx/disk/agx/cosmos/VLA:/opt/vla_demo
-      - /home/systemlabagx/disk/agx/cosmos/video:/workspaces/cosmos_ws/video
+      - ${AGX_WORKSPACES:-/home/systemlabagx/disk/workspaces}/data:/data
+      - ${AGX_WORKSPACES:-/home/systemlabagx/disk/workspaces}/data/cosmos_cache:/root/.cache
+      - ${AGX_WORKSPACES:-/home/systemlabagx/disk/workspaces}:/workspaces
+      - ${AGX_PROJECT_ROOT:-/home/systemlabagx/disk/agx}/cosmos/VLA:/opt/vla_demo
+      - ${AGX_PROJECT_ROOT:-/home/systemlabagx/disk/agx}/cosmos/video:/workspaces/cosmos_ws/video
     working_dir: /workspaces/cosmos_ws
     stdin_open: true
     tty: true

@@ -9,7 +9,7 @@ services:
       context: ./
       dockerfile: Dockerfile
     image: agx_ros/nanollm:latest
-    container_name: nanollm
+    container_name: ${CONTAINER_PREFIX:-}nanollm
     runtime: nvidia
     network_mode: host
     ipc: host
@@ -17,7 +17,7 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
-      - ROS_DOMAIN_ID=0
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
       - ROS_HOSTNAME=localhost
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - PYTHONPATH=/opt/vla_demo
@@ -44,13 +44,13 @@ services:
       # jtop 監控
       - /run/jtop.sock:/run/jtop.sock
       # 資料與模型目錄
-      - /home/systemlabagx/disk/workspaces/data:/data
-      - /home/systemlabagx/disk/workspaces/data/nanollm_models:/data/models
+      - ${AGX_WORKSPACES:-/home/systemlabagx/disk/workspaces}/data:/data
+      - ${AGX_WORKSPACES:-/home/systemlabagx/disk/workspaces}/data/nanollm_models:/data/models
       # 與 Isaac ROS 共用 workspace
-      - /home/systemlabagx/disk/workspaces:/workspaces
-      - /home/systemlabagx/disk/agx/nanollm/bridge_ws:/data/bridge_ws
-      - /home/systemlabagx/disk/agx/nanollm/webui_system:/data/webui_system
-      - /home/systemlabagx/disk/agx/cosmos/VLA:/opt/vla_demo
+      - ${AGX_WORKSPACES:-/home/systemlabagx/disk/workspaces}:/workspaces
+      - ${AGX_PROJECT_ROOT:-/home/systemlabagx/disk/agx}/nanollm/bridge_ws:/data/bridge_ws
+      - ${AGX_PROJECT_ROOT:-/home/systemlabagx/disk/agx}/nanollm/webui_system:/data/webui_system
+      - ${AGX_PROJECT_ROOT:-/home/systemlabagx/disk/agx}/cosmos/VLA:/opt/vla_demo
       
     devices:
       - /dev/snd

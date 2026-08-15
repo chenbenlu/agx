@@ -90,3 +90,9 @@ tmpclaude-*
 .claude/settings.local.json
 .codex
 CLAUDE.md
+
+# 多人開發：每人的 compose 變數（domain、container 前綴、路徑）各自不同
+.env
+!.env.example
+# 多人開發：機器位址與帳號對應表，不進版控
+docs/multiuser.local.md

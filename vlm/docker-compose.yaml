@@ -33,6 +33,8 @@ services:
       - /home/systemlabagx/disk/agx/cosmos/VLA:/opt/vla_demo
       - /home/systemlabagx/disk/agx/vlm/bbox_visualizer.py:/opt/vlm_tools/bbox_visualizer.py:ro
       - /home/systemlabagx/disk/agx/vlm/landmark_locator_node.py:/opt/vlm_tools/landmark_locator_node.py:ro
+      - /home/systemlabagx/disk/agx/vlm/marker:/opt/vlm_tools/marker:ro
+      - /home/systemlabagx/disk/agx/vlm/grounding_test:/opt/vlm_tools/grounding_test/src:rw
     stdin_open: true
     tty: true
     command: /bin/bash -c "while true; do sleep 3600; done"
